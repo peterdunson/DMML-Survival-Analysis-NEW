@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r}
-merged_df.csv <- fread("merged_df.csv")
+merged_df <- fread("merged_df.csv")
 ```
 
 
