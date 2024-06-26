@@ -9,4 +9,20 @@ output: html_document
 data_hf <- fread("/Users/PeterDunson/Desktop/data_hf.csv")
 ```
 
-Hi dbysf cnsacn
+
+```{r}
+ggplot(data = data_hf, aes(`Respiratory rate`, `Urine output`, color = outcome)) +
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE)
+```
+
+```{r}
+ggplot(data = data_hf, aes(x = `Urine output`, y = outcome, color = outcome)) +
+  geom_jitter(width = 0.2, height = 0.05) +
+  labs(title = "Scatter Plot of Urine Output vs. Outcome",
+       x = "Urine Output",
+       y = "Outcome") +
+  theme_minimal()
+```
+
+
