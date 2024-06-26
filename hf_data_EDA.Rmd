@@ -25,4 +25,8 @@ ggplot(data = data_hf, aes(x = `Urine output`, y = outcome, color = outcome)) +
   theme_minimal()
 ```
 
+```{r}
+sum(is.na(data_hf$outcome))
+```
+
 
