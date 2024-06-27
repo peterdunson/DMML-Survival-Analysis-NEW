@@ -63,6 +63,7 @@ for (var in cont) {
 }
 ```
 
+
 # chi-square test 
 
 ```{r}
@@ -77,6 +78,10 @@ for (var in cat) {
 
 
 
-
+```{r}
+mod1 <- glm(outcome ~ (gendera + hypertensive + atrialfibrillation + `CHD with no MI` + diabetes + deficiencyanemias + depression + Hyperlipemia + `Renal failure` + COPD), data = merged_df)
+mod1
+summary(mod1)
+```
 
 
