@@ -7,11 +7,12 @@ output: html_document
 
 ```{r}
 merged_df <- fread("merged_df.csv")
+merged_df$survival_time = as.numeric(difftime(merged_df$deathtime, merged_df$admittime, units = "day"))
 ```
 
 
 ```{r}
-ggplot(data = data_hf, aes(`Respiratory rate`, `Urine output`, color = outcome)) +
+ggplot(data = data_hf, aes(`Respiratory rate`, `Urine output`, color = factor(outcome))) +
   geom_point() +
   geom_smooth(method = lm, se = FALSE)
 ```
