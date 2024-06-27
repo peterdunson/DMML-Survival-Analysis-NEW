@@ -84,4 +84,17 @@ mod1
 summary(mod1)
 ```
 
+# some new columns
+```{r}
+#Total of each patients' comorbidity score
+merged_df$comorb_score =merged_df$gendera+merged_df$hypertensive+merged_df$atrialfibrillation+merged_df$`CHD with no MI`+merged_df$diabetes+merged_df$deficiencyanemias+merged_df$depression+merged_df$Hyperlipemia+merged_df$`Renal failure`+merged_df$COPD
+
+#Length of stay for survivors - LOS
+merged_df$LOS = as.numeric(difftime(merged_df$dischtime, merged_df$admittime, units = "days")) * !merged_df$outcome
+merged_df$LOS = ifelse(!merged_df$outcome, as.numeric(difftime(merged_df$dischtime, merged_df$admittime, units = "days")), NA)
+
+#total length of stay for those who both survived (discharged) and died
+merged_df$tLOS <- ifelse(is.na(merged_df$LOS), merged_df$survival_time, merged_df$LOS)
+
+```
 
