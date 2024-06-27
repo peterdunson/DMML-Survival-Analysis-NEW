@@ -8,6 +8,7 @@ output: html_document
 ```{r}
 merged_df <- fread("merged_df.csv")
 merged_df$survival_time = as.numeric(difftime(merged_df$deathtime, merged_df$admittime, units = "day"))
+#hello
 ```
 
 
