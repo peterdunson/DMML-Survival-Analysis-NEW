@@ -22,8 +22,84 @@ summary(merged_df)
 ```
 
 ```{r}
-#plotting
+#plotting the distribution of the outcome variable
+ggplot(data = merged_df, aes(x = outcome)) +
+  geom_bar() +
+  labs(title = "Distribution of Outcome Variable",
+       x = "Outcome",
+       y = "Frequency") +
+  theme_minimal()
+
 ```
+
+```{r}
+#scatterplot of the outcome variable
+ggplot(data = merged_df, aes(x = `Urine output`, y = outcome, color = outcome)) +
+  geom_jitter(width = 0.2, height = 0.05) +
+  labs(title = "Scatter Plot of Urine Output vs. Outcome",
+       x = "Urine Output",
+       y = "Outcome") +
+  theme_minimal()
+```
+
+```{r}
+#lets plot heart rate and bmi in relation to the outcome variable
+ggplot(data = merged_df, aes(x = `heart rate`, y = `BMI`, color = outcome)) +
+  geom_point() +
+  labs(title = "Scatter Plot of Heart Rate and BMI vs. Outcome",
+       x = "Heart Rate",
+       y = "BMI") +
+  theme_minimal()
+```
+
+```{r}
+table(merged_df$outcome)
+```
+
+```{r}
+library(GGally)
+
+
+# Frequency tables for categorical variables
+table(merged_df$outcome)
+table(merged_df$gender)
+table(merged_df$hypertensive)
+table(merged_df$atrialfibrillation)
+table(merged_df$diabetes)
+
+# Histograms for continuous variables
+continuous_vars <- c('heart rate', 'Systolic blood pressure', 'Diastolic blood pressure', 'Respiratory rate', 'temperature', 'SP O2')
+
+merged_df %>%
+  select(all_of(continuous_vars)) %>%
+  gather(key = "variable", value = "value") %>%
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 15, fill = "orange", color = "black") +
+  facet_wrap(~variable, scales = "free") +
+  theme_minimal() +
+  labs(title = "Distribution of Continuous Variables", x = "Value", y = "Frequency")
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
