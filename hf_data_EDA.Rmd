@@ -50,6 +50,31 @@ merged_df %>%
 
 
 
+#t test  
+
+
+```{r}
+cont <- c("age", "BMI", "heart rate", "Systolic blood pressure", "Diastolic blood pressure", "Respiratory rate", "temperature", "SP O2", "Urine output", "hematocrit", "RBC", "MCH", "MCHC", "MCV", "RDW", "Leucocyte", "Platelets", "Neutrophils", "Basophils", "Lymphocyte", "PT", "INR", "NT proBNP", "Creatine kinase", "Creatinine", "Urea nitrogen", "glucose", "Blood potassium", "Blood sodium", "Blood calcium", "Chloride", "Anion gap", "Magnesium ion", "PH", "Bicarbonate", "Lactic acid", "PCO2")
+
+for (var in cont) {
+  t_test <- t.test(merged_df[[var]] ~ merged_df$outcome, data = merged_df)
+  print(paste("T-test for", var))
+  print(t_test)
+}
+```
+
+# chi-square test 
+
+```{r}
+cat <- c("gendera", "hypertensive", "atrialfibrillation", "CHD with no MI", "diabetes", "deficiencyanemias", "depression", "Hyperlipemia", "Renal failure", "COPD")
+
+for (var in cat) {
+  chi_sq <- chisq.test(table(merged_df[[var]], merged_df$outcome))
+  print(paste("Chi-square test for", var))
+  print(chi_sq)
+}
+```
+
 
 
 
