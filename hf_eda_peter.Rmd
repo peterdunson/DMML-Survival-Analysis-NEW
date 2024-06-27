@@ -11,8 +11,19 @@ library(ggplot2)
 library(dplyr)
 ```
 
+```{r}
+merged_df <- fread("merged_df.csv")
+```
 
+```{r}
+#lets do some eda on the dataset merged_df
+#summary of the dataset
+summary(merged_df)
+```
 
+```{r}
+#plotting
+```
 
 
 
