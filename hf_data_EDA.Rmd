@@ -31,4 +31,27 @@ ggplot(data = data_hf, aes(x = `Urine output`, y = outcome, color = outcome)) +
 sum(is.na(data_hf$outcome))
 ```
 
+```{r}
+# Histograms for continuous variables
+continuous_vars <- c('heart rate', 'Systolic blood pressure', 'Diastolic blood pressure', 'Respiratory rate', 'temperature', 'SP O2')
+
+merged_df %>%
+  select(all_of(continuous_vars)) %>%
+  gather(key = "variable", value = "value") %>%
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 15, fill = "orange", color = "black") +
+  facet_wrap(~variable, scales = "free") +
+  theme_minimal() +
+  labs(title = "Distribution of Continuous Variables", x = "Value", y = "Frequency")
+
+```
+
+
+
+
+
+
+
+
+
 
