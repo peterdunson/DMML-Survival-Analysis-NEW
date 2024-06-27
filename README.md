@@ -1,7 +1,9 @@
 ## README
 
-Repository for the Data Mining and Machine Learning Research Group 
+Predictive Survival Analysis for Heart Failure Data
+
+Repository for the Data Mining and Machine Learning Research Group
 
 Big Data Summer Institute at University of Michigan
 
-Predictive Survival Analysis for Heart Failure Data
+Peter Dunson, Ephrata Getachew, Nate Stevenson
