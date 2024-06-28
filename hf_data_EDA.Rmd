@@ -92,3 +92,8 @@ merged_df$tLOS <- ifelse(is.na(merged_df$LOS), merged_df$survival_time, merged_d
 
 ```
 
+
+
+
+
+
