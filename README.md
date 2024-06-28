@@ -1,4 +1,4 @@
-# Predictive Survival Analysis Proposal
+# Predictive Survival Analysis
 
 ## Aims
 
