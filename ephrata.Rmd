@@ -1,0 +1,99 @@
+---
+title: "DMML_test"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(data.table)
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+merged_df <- fread("merged_df.csv")
+```
+
+
+```{r}
+str(merged_df)
+```
+
+
+```{r}
+cont <- c("age", "heart rate", "Systolic blood pressure", "Diastolic blood pressure", "Respiratory rate", "temperature", "SP O2", "Urine output", "RBC", "RDW", "Leucocyte", "Platelets", "Neutrophils", "Basophils", "Lymphocyte", "PT", "INR", "NT-proBNP", "Creatine kinase", "Creatinine", "Urea nitrogen", "Blood potassium", "Blood sodium", "Blood calcium", "Chloride", "Anion gap", "Magnesium ion", "PH", "Bicarbonate", "Lactic acid")
+
+for (var in cont) {
+  t_test <- t.test(merged_df[[var]] ~ merged_df$outcome, data = merged_df)
+  print(paste("T-test for", var))
+  print(t_test)
+}
+```
+
+
+
+
+
+
+
+
+```{r}
+cat <- c("gendera", "hypertensive", "atrialfibrillation", "deficiencyanemias", "Renal failure")
+
+for (var in cat) {
+  chi_sq <- chisq.test(table(merged_df[[var]], merged_df$outcome))
+  print(paste("Chi-square test for", var))
+  print(chi_sq)
+}
+```
+
+```{r}
+mod1 <- glm(outcome ~ (gendera + hypertensive + atrialfibrillation + `CHD with no MI` + diabetes + deficiencyanemias + depression + Hyperlipemia + `Renal failure` + COPD), data = merged_df)
+mod1
+summary(mod1)
+```
+
+```{r}
+cont <- c("age", "heart rate", "Systolic blood pressure", "Diastolic blood pressure", "Respiratory rate", "temperature", "SP O2", "Urine output", "RBC", "RDW", "Leucocyte", "Platelets", "Neutrophils", "Basophils", "Lymphocyte", "PT", "INR", "NT-proBNP", "Creatine kinase", "Creatinine", "Urea nitrogen", "Blood potassium", "Blood sodium", "Blood calcium", "Chloride", "Anion gap", "Magnesium ion", "PH", "Bicarbonate", "Lactic acid")
+
+for (var in cont) {
+  t_test <- t.test(merged_df[[var]] ~ merged_df$outcome, data = merged_df)
+  print(paste("T-test for", var))
+  print(t_test)
+}
+```
+
+
+
+
+
+```{r}
+continuous_vars <- merged_df %>%
+  select(age, `heart rate`, `Systolic blood pressure`,`Diastolic blood pressure`, `Respiratory rate`, `Urea nitrogen`, )  
+cor_matrix <- cor(continuous_vars, use = "complete.obs")
+cor_matrix
+library(corrplot)
+corrplot(cor_matrix, method = "color", type = "upper", tl.cex = 0.8, tl.col = "black", addCoef.col = "black")
+```
+
+
+```{r}
+# List of categorical variables
+categorical_vars <- c("gender", "hypertensive", "atrialfibrillation", "CHD_with_no_MI", "diabetes", 
+                      "deficiencyanemias", "depression", "Hyperlipemia", "Renal_failure", "COPD")
+
+# Convert to factors if not already
+hf_data[categorical_vars] <- lapply(hf_data[categorical_vars], as.factor)
+
+# Chi-square tests for categorical variables
+for (var in categorical_vars) {
+  cat("Chi-square test for", var, ":\n")
+  print(chisq.test(table(hf_data[[var]], hf_data$outcome)))
+  cat("\n")
+}
+
+```
+
