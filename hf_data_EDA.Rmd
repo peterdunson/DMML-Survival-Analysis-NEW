@@ -113,6 +113,29 @@ while (TRUE) {
 summary(full_model)
 ```
 
+```{r}
+merged_df %>%
+  mutate(outcome = recode(factor(outcome), `0` = "Survived", `1` = "Died")) %>%
+  group_by(factor(outcome)) %>%
+  summarise(sys_bp = mean(`Systolic blood pressure`, na.rm = TRUE), 
+            dia_bp = mean(`Diastolic blood pressure`, na.rm = TRUE),
+            platelets = mean(Platelets),
+            p_h = mean(PH, na.rm = TRUE),
+            i_n_r = mean(INR, na.rm = TRUE),
+            p_t = mean(PT, na.rm = TRUE),
+            m_c_v = mean(MCV)) %>%
+  rename(
+    Outcome = `factor(outcome)`,
+    `Systolic BP (mmHg)` = sys_bp,
+    `Diastolic BP (mmHg)` = dia_bp,
+    `Platelets ($10^9$/L)` = platelets,
+    `pH` = p_h,
+    `INR` = i_n_r,
+    `PT (s)` = p_t,
+    `MCV (fL)` = m_c_v
+  ) %>%
+    kable(digits = 2, caption = "Summary Statistics by Outcome")
+```
 
 
 
