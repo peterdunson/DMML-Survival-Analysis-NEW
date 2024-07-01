@@ -43,6 +43,7 @@ Top 10 features selected based on PCA loadings: gendera, Systolic blood pressure
 
 ![](PCA.jpeg)
 
+## EDA
 
 ```{r,echo=FALSE, warning=FALSE}
 # Histograms for continuous variables
@@ -60,7 +61,7 @@ merged_df %>%
 ```
 
 
-#t test  
+# t-test  
 
 
 ```{r,results='hide'}
@@ -128,9 +129,6 @@ summary(full_model)
 
 ![](error1.png)
 
-
-
-# some new columns
 ```{r, echo=FALSE}
 #Total of each patients' comorbidity score - comorb_score
 merged_df$comorb_score = merged_df$gendera + merged_df$hypertensive + merged_df$atrialfibrillation + merged_df$`CHD with no MI` + merged_df$diabetes + merged_df$deficiencyanemias + merged_df$depression + merged_df$Hyperlipemia + merged_df$`Renal failure` + merged_df$COPD
