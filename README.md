@@ -42,9 +42,9 @@ We will utilize the heart failure dataset extracted from the MIMIC-III database,
 
 ## Authors
 
-- Ephrata
-- Peter
-- Nate
+- Ephrata Getachew
+- Peter Dunson
+- Nate Stevenson
 
 ## Repository Structure
 
