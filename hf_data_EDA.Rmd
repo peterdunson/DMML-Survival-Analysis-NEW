@@ -137,6 +137,10 @@ merged_df %>%
     kable(digits = 2, caption = "Summary Statistics by Outcome")
 ```
 
+# PCA findings
+```{r}
+#Top 10 features selected based on PCA loadings: ['gendera', 'Systolic blood pressure', 'Hyperlipemia', 'depression', 'Diastolic blood pressure', 'Platelets', 'PH', 'INR', 'PT', 'MCV']
+```
 
 
 
