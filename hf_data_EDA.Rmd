@@ -7,7 +7,7 @@ output:
   html_document: default
 ---
 
-```{r, echo=FALSE, warning=FALSE, results='hide'}
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
 library(tidyverse)
 library(dplyr)
 library(ggplot2)
@@ -20,7 +20,7 @@ merged_df <- fread("merged_df.csv")
 merged_df$survival_time = as.numeric(difftime(merged_df$deathtime, merged_df$admittime, units = "day"))
 ```
 
-**Aims**
+**Aim**
 
 -   Fit a model to predict in-hospital mortality among patients in the heart failure dataset.
 
@@ -31,7 +31,8 @@ merged_df$survival_time = as.numeric(difftime(merged_df$deathtime, merged_df$adm
 
 -   How do demographics, vital signs, comorbidities, and laboratory results influence the risk of            hospital mortality? 
 
--   How can we ensure the interpretability of our model  while also maintaining prediction accuracy?    
+-   How can we ensure the interpretability of our model  while also maintaining prediction accuracy? 
+
 -   Which demographic factors, vital signs, comorbidities, and laboratory results are the most               significant  predictors of in-hospital mortality among ICU-admitted heart failure patients in the        MIMIC-III database?
 
 
