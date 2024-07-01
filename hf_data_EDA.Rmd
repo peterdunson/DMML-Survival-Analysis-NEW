@@ -37,7 +37,6 @@ merged_df$survival_time = as.numeric(difftime(merged_df$deathtime, merged_df$adm
 
 \newpage
 
-## EDA
 
 ```{r, echo=FALSE}
 #Total of each patients' comorbidity score - comorb_score
