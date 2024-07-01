@@ -44,7 +44,7 @@ Top 10 features selected based on PCA loadings: gendera, Systolic blood pressure
 ![](PCA.jpeg)
 
 
-```{r,echo=FALSE}
+```{r,echo=FALSE, warning=FALSE}
 # Histograms for continuous variables
 continuous_vars <- c('heart rate', 'Systolic blood pressure', 'Diastolic blood pressure', 'Respiratory rate', 'temperature', 'SP O2')
 
@@ -64,7 +64,14 @@ merged_df %>%
 
 
 ```{r,results='hide'}
-cont <- c("age", "BMI", "heart rate", "Systolic blood pressure", "Diastolic blood pressure", "Respiratory rate", "temperature", "SP O2", "Urine output", "hematocrit", "RBC", "MCH", "MCHC", "MCV", "RDW", "Leucocyte", "Platelets", "Neutrophils", "Basophils", "Lymphocyte", "PT", "INR", "NT-proBNP", "Creatine kinase", "Creatinine", "Urea nitrogen", "glucose", "Blood potassium", "Blood sodium", "Blood calcium", "Chloride", "Anion gap", "Magnesium ion", "PH", "Bicarbonate", "Lactic acid", "PCO2")
+cont <- c("age", "BMI", "heart rate", "Systolic blood pressure", 
+          "Diastolic blood pressure", "Respiratory rate", "temperature", "SP O2", 
+          "Urine output", "hematocrit", "RBC", "MCH", "MCHC", "MCV", "RDW", 
+          "Leucocyte", "Platelets", "Neutrophils", "Basophils", "Lymphocyte", 
+          "PT", "INR", "NT-proBNP", "Creatine kinase", "Creatinine", 
+          "Urea nitrogen", "glucose", "Blood potassium", "Blood sodium", 
+          "Blood calcium", "Chloride", "Anion gap", "Magnesium ion", "PH", 
+          "Bicarbonate", "Lactic acid", "PCO2")
 
 for (var in cont) {
   t_test <- t.test(merged_df[[var]] ~ merged_df$outcome, data = merged_df)
@@ -78,7 +85,9 @@ for (var in cont) {
 # chi-square test 
 
 ```{r, results='hide'}
-cat <- c("gendera", "hypertensive", "atrialfibrillation", "CHD with no MI", "diabetes", "deficiencyanemias", "depression", "Hyperlipemia", "Renal failure", "COPD")
+cat <- c("gendera", "hypertensive", "atrialfibrillation", "CHD with no MI", 
+         "diabetes", "deficiencyanemias", "depression", "Hyperlipemia", 
+         "Renal failure", "COPD")
 
 for (var in cat) {
   chi_sq <- chisq.test(table(merged_df[[var]], merged_df$outcome))
@@ -89,15 +98,17 @@ for (var in cat) {
 
 
 ```{r, results='hide'}
-full_model <- glm(outcome ~ gendera + hypertensive + atrialfibrillation + `CHD with no MI` + 
-            diabetes + deficiencyanemias + depression + Hyperlipemia + `Renal failure` + 
+full_model <- glm(outcome ~ gendera + hypertensive + atrialfibrillation + 
+                    `CHD with no MI` + diabetes + deficiencyanemias + depression 
+                  + Hyperlipemia + `Renal failure` + 
             COPD + age + `heart rate` + BMI + `Systolic blood pressure` + 
             `Diastolic blood pressure` + `Respiratory rate` + temperature + 
             `SP O2` + `Urine output` + hematocrit + RBC + MCH + MCHC + MCV + 
             RDW + Leucocyte + Platelets + Neutrophils + Basophils + Lymphocyte + 
-            PT + INR + `NT-proBNP` + `Creatine kinase` + Creatinine + `Urea nitrogen` + 
-            glucose + `Blood potassium` + `Blood sodium` + `Blood calcium` + Chloride + 
-            `Anion gap` + `Magnesium ion` + PH + Bicarbonate + `Lactic acid` + PCO2, 
+            PT + INR + `NT-proBNP` + `Creatine kinase` + Creatinine + 
+              `Urea nitrogen` + glucose + `Blood potassium` + `Blood sodium` + 
+              `Blood calcium` +  Chloride + `Anion gap` + `Magnesium ion` + PH 
+            + Bicarbonate + `Lactic acid` + PCO2, 
             data = merged_df, family = "binomial")
 summary(full_model)
 ```
