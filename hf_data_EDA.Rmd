@@ -95,7 +95,7 @@ merged_df %>%
 ```
 
 
-# t-test  
+## t-test  
 
 
 ```{r,results='hide'}
@@ -115,7 +115,7 @@ for (var in cont) {
 }
 ```
 
-# chi-square test 
+## chi-square test 
 
 ```{r, results='hide'}
 cat <- c("gendera", "hypertensive", "atrialfibrillation", "CHD with no MI", 
@@ -161,14 +161,14 @@ summary(full_model)
 
 ![](error1.png)
 
-### Variables
+## Variables
 
 Top 10 features selected based on PCA loadings: gendera, Systolic blood pressure, Hyperlipemia, depression, Diastolic blood pressure, Platelets, PH, INR, PT, MCV. 
 
 
 ![](PCA.jpeg)
 
-**Next step**
+## Next step
 
 -   To develop a model, we plan to start with logistic regression and CARTs for a binary outcome.For         logistic regression we will check for multicollinearity using VIF. We intend to include interaction      terms, polynomial features or scaling variables to better capture patterns in the data.  
 
