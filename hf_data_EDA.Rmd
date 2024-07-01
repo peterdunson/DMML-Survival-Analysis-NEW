@@ -35,15 +35,49 @@ merged_df$survival_time = as.numeric(difftime(merged_df$deathtime, merged_df$adm
 
 -   Which demographic factors, vital signs, comorbidities, and laboratory results are the most               significant  predictors of in-hospital mortality among ICU-admitted heart failure patients in the        MIMIC-III database?
 
-
-### Variables
-
-Top 10 features selected based on PCA loadings: gendera, Systolic blood pressure, Hyperlipemia, depression, Diastolic blood pressure, Platelets, PH, INR, PT, MCV. 
-
-
-![](PCA.jpeg)
+\newpage
 
 ## EDA
+
+```{r, echo=FALSE}
+#Total of each patients' comorbidity score - comorb_score
+merged_df$comorb_score = merged_df$gendera + merged_df$hypertensive + merged_df$atrialfibrillation + merged_df$`CHD with no MI` + merged_df$diabetes + merged_df$deficiencyanemias + merged_df$depression + merged_df$Hyperlipemia + merged_df$`Renal failure` + merged_df$COPD
+
+#Length of stay for survivors - LOS
+merged_df$LOS = as.numeric(difftime(merged_df$dischtime, merged_df$admittime, units = "days")) * !merged_df$outcome
+merged_df$LOS = ifelse(!merged_df$outcome, as.numeric(difftime(merged_df$dischtime, merged_df$admittime, units = "days")), NA)
+
+#total length of stay for those who both survived (discharged) and died - tLOS
+merged_df$tLOS <- ifelse(is.na(merged_df$LOS), merged_df$survival_time, merged_df$LOS)
+
+```
+
+
+
+```{r, echo=FALSE}
+merged_df %>%
+  mutate(outcome = recode(factor(outcome), `0` = "Survived", `1` = "Died")) %>%
+  group_by(factor(outcome)) %>%
+  summarise(sys_bp = mean(`Systolic blood pressure`, na.rm = TRUE), 
+            dia_bp = mean(`Diastolic blood pressure`, na.rm = TRUE),
+            platelets = mean(Platelets),
+            p_h = mean(PH, na.rm = TRUE),
+            i_n_r = mean(INR, na.rm = TRUE),
+            p_t = mean(PT, na.rm = TRUE),
+            m_c_v = mean(MCV)) %>%
+  rename(
+    Outcome = `factor(outcome)`,
+    `Systolic BP (mmHg)` = sys_bp,
+    `Diastolic BP (mmHg)` = dia_bp,
+    `Platelets ($10^9$/L)` = platelets,
+    `pH` = p_h,
+    `INR` = i_n_r,
+    `PT (s)` = p_t,
+    `MCV (fL)` = m_c_v
+  ) %>%
+    kable(digits = 2, caption = "Summary Statistics by Outcome")
+```
+
 
 ```{r,echo=FALSE, warning=FALSE}
 # Histograms for continuous variables
@@ -80,8 +114,6 @@ for (var in cont) {
   print(t_test)
 }
 ```
-
-
 
 # chi-square test 
 
@@ -129,45 +161,12 @@ summary(full_model)
 
 ![](error1.png)
 
-```{r, echo=FALSE}
-#Total of each patients' comorbidity score - comorb_score
-merged_df$comorb_score = merged_df$gendera + merged_df$hypertensive + merged_df$atrialfibrillation + merged_df$`CHD with no MI` + merged_df$diabetes + merged_df$deficiencyanemias + merged_df$depression + merged_df$Hyperlipemia + merged_df$`Renal failure` + merged_df$COPD
+### Variables
 
-#Length of stay for survivors - LOS
-merged_df$LOS = as.numeric(difftime(merged_df$dischtime, merged_df$admittime, units = "days")) * !merged_df$outcome
-merged_df$LOS = ifelse(!merged_df$outcome, as.numeric(difftime(merged_df$dischtime, merged_df$admittime, units = "days")), NA)
-
-#total length of stay for those who both survived (discharged) and died - tLOS
-merged_df$tLOS <- ifelse(is.na(merged_df$LOS), merged_df$survival_time, merged_df$LOS)
-
-```
+Top 10 features selected based on PCA loadings: gendera, Systolic blood pressure, Hyperlipemia, depression, Diastolic blood pressure, Platelets, PH, INR, PT, MCV. 
 
 
-
-```{r, echo=FALSE}
-merged_df %>%
-  mutate(outcome = recode(factor(outcome), `0` = "Survived", `1` = "Died")) %>%
-  group_by(factor(outcome)) %>%
-  summarise(sys_bp = mean(`Systolic blood pressure`, na.rm = TRUE), 
-            dia_bp = mean(`Diastolic blood pressure`, na.rm = TRUE),
-            platelets = mean(Platelets),
-            p_h = mean(PH, na.rm = TRUE),
-            i_n_r = mean(INR, na.rm = TRUE),
-            p_t = mean(PT, na.rm = TRUE),
-            m_c_v = mean(MCV)) %>%
-  rename(
-    Outcome = `factor(outcome)`,
-    `Systolic BP (mmHg)` = sys_bp,
-    `Diastolic BP (mmHg)` = dia_bp,
-    `Platelets ($10^9$/L)` = platelets,
-    `pH` = p_h,
-    `INR` = i_n_r,
-    `PT (s)` = p_t,
-    `MCV (fL)` = m_c_v
-  ) %>%
-    kable(digits = 2, caption = "Summary Statistics by Outcome")
-```
-
+![](PCA.jpeg)
 
 **Next step**
 
