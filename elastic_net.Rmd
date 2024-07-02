@@ -1,0 +1,55 @@
+---
+title: "elastic_net"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+
+library(glmnet)
+library(data.table)
+
+```
+
+```{r}
+
+```
+
+
+
+
+```{r}
+mult_complete_df = subset(mult_impute_df, select = -c(deathtime, survival_time, LOS, outcome, Unnamed_0, V1, admittime))
+
+
+
+#Elastic Net
+
+x <- as.matrix(mult_complete_df)  
+y <- mult_impute_df$outcome
+
+
+set.seed(510)  
+cv_fit <- cv.glmnet(x, y, family = "binomial", alpha = 0.5)  
+
+
+best_lambda_enet <- cv_fit$lambda.min
+cat("Best lambda:", best_lambda_enet, "\n")
+
+
+final_model <- glmnet(x, y, family = "binomial", alpha = 1, lambda = best_lambda_enet)
+
+
+coefficients <- coef(final_model)
+print(coefficients)
+
+selected_covariates <- rownames(coefficients)[which(coefficients != 0)]
+cat("Selected covariates:", selected_covariates, "\n")
+
+```
+
+
+
+
+
