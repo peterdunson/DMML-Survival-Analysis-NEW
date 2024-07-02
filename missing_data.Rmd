@@ -24,9 +24,5 @@ merged_dt_clean <- merged_dt[complete.cases(merged_dt[, ..include_columns])]
 # Convert back to data.frame if needed
 merged_df_clean <- as.data.frame(merged_dt_clean)
 
-
-
-
 ```
-
 
