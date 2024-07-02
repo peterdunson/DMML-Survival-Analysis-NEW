@@ -1,0 +1,80 @@
+---
+title: "random_forest"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+install.packages("randomForest")
+
+library(randomForest)
+
+```
+
+```{r}
+# Install and load necessary libraries
+library(randomForest)
+library(data.table)
+
+
+# Exclude specified columns
+mult_complete_df = subset(mult_impute_df, select = -c(deathtime, survival_time, LOS, outcome, Unnamed_0, V1, admittime))
+
+# Convert non-numeric columns to numeric if necessary
+numeric_columns <- colnames(mult_complete_df)[sapply(mult_complete_df, is.numeric)]
+non_numeric_columns <- setdiff(colnames(mult_complete_df), numeric_columns)
+cat("Non-numeric columns: ", non_numeric_columns, "\n")
+
+# Convert non-numeric columns to numeric if possible (e.g., factor levels to integers)
+for (col in non_numeric_columns) {
+  mult_complete_df[[col]] <- as.numeric(as.character(mult_complete_df[[col]]))
+}
+
+# Check for NAs introduced by coercion
+cat("Number of NAs in each column: \n")
+print(colSums(is.na(mult_complete_df)))
+
+# Handle missing values (e.g., impute, remove, etc.)
+# For simplicity, let's remove rows with any NAs
+mult_complete_df <- na.omit(mult_complete_df)
+
+# Prepare data
+x <- as.data.frame(mult_complete_df[, !colnames(mult_complete_df) %in% "outcome", with = FALSE])
+y <- mult_complete_df$outcome
+
+# Set seed for reproducibility
+set.seed(510)
+
+# Train the Random Forest model
+rf_model <- randomForest(x, y, importance = TRUE, ntree = 500)
+
+# Print the model summary
+print(rf_model)
+
+# Get feature importances
+importance <- importance(rf_model)
+
+# Convert to a data frame for easy viewing
+importance_df <- data.frame(Feature = rownames(importance), Importance = importance[, 'MeanDecreaseGini'])
+
+# Sort by importance
+importance_df <- importance_df[order(-importance_df$Importance), ]
+
+# Print the sorted feature importances
+print(importance_df)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
