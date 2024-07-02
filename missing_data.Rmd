@@ -26,9 +26,20 @@ merged_df_clean <- as.data.frame(merged_dt_clean)
 
 ```
 
-```{r}
-file_path <- "documents/DMML-Survival-Analysis-NEW/multiple_imputation_NEW.csv"
-mult_impute_df <- fread(file_path)
-```
 
+
+```{r}
+get_wd()
+
+library(data.table)
+
+# Read the dataset from the specified location
+file_path <- "multiple_imputation_NEW.csv"
+mult_impute_df <- fread(file_path)
+
+# Display the first few rows of the dataset to verify
+head(mult_impute_df)
+
+
+```
 
