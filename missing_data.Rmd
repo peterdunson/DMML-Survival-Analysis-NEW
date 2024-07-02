@@ -43,3 +43,12 @@ head(mult_impute_df)
 
 ```
 
+
+```{r}
+mult_impute_df %>%
+  summarize(PCO2old = mean(PCO2, na.rm = TRUE))
+
+
+```
+
+
