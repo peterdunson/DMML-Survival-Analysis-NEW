@@ -1,0 +1,32 @@
+---
+title: "missing_data_hf"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+
+library(data.table)
+
+# Assuming your dataset is a data.table called merged_df
+merged_dt <- as.data.table(merged_df)  # Convert to data.table if it's not already
+
+# Specify the columns to exclude from the NA check
+exclude_columns <- c("survival_time", "deathtime", "LOS")
+
+# Create a logical vector indicating which columns to include in the NA check
+include_columns <- setdiff(names(merged_dt), exclude_columns)
+
+# Subset the data.table to include only rows without NAs in the specified columns
+merged_dt_clean <- merged_dt[complete.cases(merged_dt[, ..include_columns])]
+
+# Convert back to data.frame if needed
+merged_df_clean <- as.data.frame(merged_dt_clean)
+
+
+
+
+```
+
+
