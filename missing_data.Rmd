@@ -26,3 +26,9 @@ merged_df_clean <- as.data.frame(merged_dt_clean)
 
 ```
 
+```{r}
+file_path <- "documents/DMML-Survival-Analysis-NEW/multiple_imputation_NEW.csv"
+mult_impute_df <- fread(file_path)
+```
+
+
