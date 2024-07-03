@@ -158,13 +158,6 @@ cat("Selected covariates:", selected_covariates, "\n")
 ```
 
 ```{r}
-# Split the data into training and test sets
-set.seed(510)
-train_idx <- sample(1:nrow(x), size = 0.8 * nrow(x))
-x_train <- x[train_idx, ]
-y_train <- y[train_idx]
-x_test <- x[-train_idx, ]
-y_test <- y[-train_idx]
 
 # Fit the final model on the training data
 final_model <- glmnet(x_train, y_train, family = "binomial", alpha = best_alpha, lambda = best_lambda)
@@ -187,14 +180,6 @@ cat("Test log-loss:", test_log_loss, "\n")
 # Load necessary library
 install.packages('ROCR')
 library(ROCR)
-
-# Split the data into training and test sets
-set.seed(510)
-train_idx <- sample(1:nrow(x), size = 0.8 * nrow(x))
-x_train <- x[train_idx, ]
-y_train <- y[train_idx]
-x_test <- x[-train_idx, ]
-y_test <- y[-train_idx]
 
 # Fit the final model on the training data
 final_model <- glmnet(x_train, y_train, family = "binomial", alpha = best_alpha, lambda = best_lambda)
