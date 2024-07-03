@@ -33,7 +33,7 @@ best_lambda_enet <- cv_fit$lambda.min
 cat("Best lambda:", best_lambda_enet, "\n")
 
 
-final_model <- glmnet(x, y, family = "binomial", alpha = 1, lambda = best_lambda_enet)
+final_model <- glmnet(x, y, family = "binomial", alpha = .5, lambda = best_lambda_enet)
 
 
 coefficients <- coef(final_model)
@@ -43,6 +43,180 @@ selected_covariates <- rownames(coefficients)[which(coefficients != 0)]
 cat("Selected covariates:", selected_covariates, "\n")
 
 ```
+
+
+
+
+```{r}
+# Load necessary libraries
+library(glmnet)
+library(data.table)
+
+# Convert data.frame to data.table
+dt <- as.data.table(mult_complete_df)
+
+# Print the structure of the entire dataframe
+cat("Structure of the entire dataframe:\n")
+
+
+# Exclude the 'outcome' column and prepare the predictor matrix
+if ("outcome" %in% names(dt)) {
+  predictor_names <- setdiff(names(dt), "outcome")  # Get names of predictor columns
+  x <- as.matrix(dt[, ..predictor_names])  # Exclude the outcome variable
+  y <- dt$outcome
+} else {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Print column names after excluding 'outcome'
+cat("Column names after excluding 'outcome':\n")
+print(colnames(x))
+
+# Ensure x has at least two columns
+if (ncol(x) < 2) {
+  stop("The predictor matrix 'x' must have at least two columns.")
+}
+
+# Set seed for reproducibility
+set.seed(510)
+
+# Define a range of alpha values to test
+alpha_values <- seq(0, 1, by = 0.1)
+
+# Initialize variables to store results
+best_alpha <- NULL
+best_lambda <- NULL
+best_log_loss <- Inf
+
+# Function to calculate log-loss
+log_loss <- function(y_true, y_pred) {
+  -mean(y_true * log(y_pred) + (1 - y_true) * log(1 - y_pred))
+}
+
+# Iterate through each alpha value
+for (alpha in alpha_values) {
+  # Perform cross-validation for the current alpha value
+  cv_fit <- cv.glmnet(x, y, family = "binomial", alpha = alpha)
+  
+  # Get the best lambda for the current alpha
+  lambda_min <- cv_fit$lambda.min
+  
+  # Evaluate the model using custom cross-validation
+  k <- 10  # Number of folds
+  folds <- sample(rep(1:k, length.out = length(y)))  # Randomly assign data to folds
+  
+  cv_errors <- c()  # To store cross-validation errors
+  
+  for (i in 1:k) {
+    # Split the data into training and validation sets
+    train_idx <- which(folds != i)
+    valid_idx <- which(folds == i)
+    
+    x_train <- x[train_idx, ]
+    y_train <- y[train_idx]
+    x_valid <- x[valid_idx, ]
+    y_valid <- y[valid_idx]
+    
+    # Fit the model on the training data
+    model <- glmnet(x_train, y_train, family = "binomial", alpha = alpha, lambda = lambda_min)
+    
+    # Predict on the validation data
+    predictions <- predict(model, s = lambda_min, newx = x_valid, type = "response")
+    
+    # Calculate the validation error (log-loss)
+    cv_errors <- c(cv_errors, log_loss(y_valid, predictions))
+  }
+  
+  # Calculate the mean cross-validated log-loss for the current alpha
+  mean_log_loss <- mean(cv_errors)
+  
+  # Update the best alpha and lambda if the current log-loss is lower
+  if (mean_log_loss < best_log_loss) {
+    best_log_loss <- mean_log_loss
+    best_alpha <- alpha
+    best_lambda <- lambda_min
+  }
+  
+  cat("Alpha:", alpha, "Mean log-loss:", mean_log_loss, "\n")
+}
+
+# Print the best alpha and lambda
+cat("Best alpha:", best_alpha, "\n")
+cat("Best lambda:", best_lambda, "\n")
+
+# Fit the final model using the best alpha and lambda
+final_model <- glmnet(x, y, family = "binomial", alpha = best_alpha, lambda = best_lambda)
+
+# Extract the coefficients from the final model
+coefficients <- coef(final_model)
+print(coefficients)
+
+# Identify the selected covariates (non-zero coefficients)
+selected_covariates <- rownames(coefficients)[which(coefficients != 0)]
+cat("Selected covariates:", selected_covariates, "\n")
+
+```
+
+```{r}
+# Split the data into training and test sets
+set.seed(510)
+train_idx <- sample(1:nrow(x), size = 0.8 * nrow(x))
+x_train <- x[train_idx, ]
+y_train <- y[train_idx]
+x_test <- x[-train_idx, ]
+y_test <- y[-train_idx]
+
+# Fit the final model on the training data
+final_model <- glmnet(x_train, y_train, family = "binomial", alpha = best_alpha, lambda = best_lambda)
+
+# Predict on the test data
+predictions <- predict(final_model, s = best_lambda, newx = x_test, type = "response")
+
+# Calculate performance metrics (e.g., log-loss, accuracy)
+log_loss <- function(y_true, y_pred) {
+  -mean(y_true * log(y_pred) + (1 - y_true) * log(1 - y_pred))
+}
+test_log_loss <- log_loss(y_test, predictions)
+cat("Test log-loss:", test_log_loss, "\n")
+
+```
+
+
+
+```{r}
+# Load necessary library
+install.packages('ROCR')
+library(ROCR)
+
+# Split the data into training and test sets
+set.seed(510)
+train_idx <- sample(1:nrow(x), size = 0.8 * nrow(x))
+x_train <- x[train_idx, ]
+y_train <- y[train_idx]
+x_test <- x[-train_idx, ]
+y_test <- y[-train_idx]
+
+# Fit the final model on the training data
+final_model <- glmnet(x_train, y_train, family = "binomial", alpha = best_alpha, lambda = best_lambda)
+
+# Predict on the test data
+predictions <- predict(final_model, s = best_lambda, newx = x_test, type = "response")
+
+# Calculate AUC
+pred <- prediction(predictions, y_test)
+perf <- performance(pred, measure = "auc")
+auc <- perf@y.values[[1]]
+cat("AUC:", auc, "\n")
+
+# Optionally, plot the ROC curve
+roc_perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+plot(roc_perf, col = "blue", lwd = 2, main = "ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = "red")
+
+```
+
+
+
 
 
 
