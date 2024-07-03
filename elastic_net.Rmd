@@ -6,23 +6,23 @@ output: html_document
 ---
 
 ```{r}
-
 library(glmnet)
 library(data.table)
-
 ```
 
 
 
 ```{r}
-mult_complete_df = subset(mult_impute_df, select = -c(deathtime, survival_time, LOS, outcome, Unnamed_0, V1, admittime))
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+RF_complete_df = subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group))
 
 
 
 #Elastic Net
 
-x <- as.matrix(mult_complete_df)  
-y <- mult_impute_df$outcome
+x <- as.matrix(RF_complete_df)  
+y <- RF_impute_df$outcome
 
 
 set.seed(510)  
@@ -47,17 +47,18 @@ cat("Selected covariates:", selected_covariates, "\n")
 
 
 
+
 ```{r}
 # Load necessary libraries
 library(glmnet)
 library(data.table)
 
 # Convert data.frame to data.table
-dt <- as.data.table(mult_complete_df)
+dt <- as.data.table(RF_complete_df)
 
 # Print the structure of the entire dataframe
 cat("Structure of the entire dataframe:\n")
-
+print(str(dt))
 
 # Exclude the 'outcome' column and prepare the predictor matrix
 if ("outcome" %in% names(dt)) {
@@ -78,7 +79,14 @@ if (ncol(x) < 2) {
 }
 
 # Set seed for reproducibility
-set.seed(510)
+set.seed(213)
+
+# Split the data into training and test sets
+train_idx <- sample(1:nrow(x), size = 0.8 * nrow(x))
+x_train <- x[train_idx, ]
+y_train <- y[train_idx]
+x_test <- x[-train_idx, ]
+y_test <- y[-train_idx]
 
 # Define a range of alpha values to test
 alpha_values <- seq(0, 1, by = 0.1)
@@ -96,35 +104,35 @@ log_loss <- function(y_true, y_pred) {
 # Iterate through each alpha value
 for (alpha in alpha_values) {
   # Perform cross-validation for the current alpha value
-  cv_fit <- cv.glmnet(x, y, family = "binomial", alpha = alpha)
+  cv_fit <- cv.glmnet(x_train, y_train, family = "binomial", alpha = alpha)
   
   # Get the best lambda for the current alpha
   lambda_min <- cv_fit$lambda.min
   
   # Evaluate the model using custom cross-validation
   k <- 10  # Number of folds
-  folds <- sample(rep(1:k, length.out = length(y)))  # Randomly assign data to folds
+  folds <- sample(rep(1:k, length.out = length(y_train)))  # Randomly assign data to folds
   
   cv_errors <- c()  # To store cross-validation errors
   
   for (i in 1:k) {
     # Split the data into training and validation sets
-    train_idx <- which(folds != i)
-    valid_idx <- which(folds == i)
+    train_fold_idx <- which(folds != i)
+    valid_fold_idx <- which(folds == i)
     
-    x_train <- x[train_idx, ]
-    y_train <- y[train_idx]
-    x_valid <- x[valid_idx, ]
-    y_valid <- y[valid_idx]
+    x_train_fold <- x_train[train_fold_idx, ]
+    y_train_fold <- y_train[train_fold_idx]
+    x_valid_fold <- x_train[valid_fold_idx, ]
+    y_valid_fold <- y_train[valid_fold_idx]
     
-    # Fit the model on the training data
-    model <- glmnet(x_train, y_train, family = "binomial", alpha = alpha, lambda = lambda_min)
+    # Fit the model on the training fold data
+    model <- glmnet(x_train_fold, y_train_fold, family = "binomial", alpha = alpha, lambda = lambda_min)
     
-    # Predict on the validation data
-    predictions <- predict(model, s = lambda_min, newx = x_valid, type = "response")
+    # Predict on the validation fold data
+    predictions <- predict(model, s = lambda_min, newx = x_valid_fold, type = "response")
     
     # Calculate the validation error (log-loss)
-    cv_errors <- c(cv_errors, log_loss(y_valid, predictions))
+    cv_errors <- c(cv_errors, log_loss(y_valid_fold, predictions))
   }
   
   # Calculate the mean cross-validated log-loss for the current alpha
@@ -144,8 +152,15 @@ for (alpha in alpha_values) {
 cat("Best alpha:", best_alpha, "\n")
 cat("Best lambda:", best_lambda, "\n")
 
-# Fit the final model using the best alpha and lambda
-final_model <- glmnet(x, y, family = "binomial", alpha = best_alpha, lambda = best_lambda)
+# Fit the final model using the best alpha and lambda on the full training data
+final_model <- glmnet(x_train, y_train, family = "binomial", alpha = best_alpha, lambda = best_lambda)
+
+# Predict on the test data
+test_predictions <- predict(final_model, s = best_lambda, newx = x_test, type = "response")
+
+# Calculate log-loss on the test data
+test_log_loss <- log_loss(y_test, test_predictions)
+cat("Test log-loss:", test_log_loss, "\n")
 
 # Extract the coefficients from the final model
 coefficients <- coef(final_model)
@@ -155,22 +170,6 @@ print(coefficients)
 selected_covariates <- rownames(coefficients)[which(coefficients != 0)]
 cat("Selected covariates:", selected_covariates, "\n")
 
-```
-
-```{r}
-
-# Fit the final model on the training data
-final_model <- glmnet(x_train, y_train, family = "binomial", alpha = best_alpha, lambda = best_lambda)
-
-# Predict on the test data
-predictions <- predict(final_model, s = best_lambda, newx = x_test, type = "response")
-
-# Calculate performance metrics (e.g., log-loss, accuracy)
-log_loss <- function(y_true, y_pred) {
-  -mean(y_true * log(y_pred) + (1 - y_true) * log(1 - y_pred))
-}
-test_log_loss <- log_loss(y_test, predictions)
-cat("Test log-loss:", test_log_loss, "\n")
 
 ```
 
@@ -178,7 +177,7 @@ cat("Test log-loss:", test_log_loss, "\n")
 
 ```{r}
 # Load necessary library
-install.packages('ROCR')
+
 library(ROCR)
 
 # Fit the final model on the training data
