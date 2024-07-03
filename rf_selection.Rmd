@@ -21,7 +21,7 @@ library(pROC)
 RF_impute_df <- fread("RF_imputation_NEW.csv")
 
 # Subset the data to exclude unnecessary columns
-RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group))
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
 
 # Ensure the outcome variable is included and properly named
 if (!("outcome" %in% names(RF_complete_df))) {
@@ -125,7 +125,7 @@ RF_impute_df <- fread("RF_imputation_NEW.csv")
 # Subset the data to include only selected important variables and outcome
 important_features <- c("Renal_failure", "heart_rate", "temperature", "SP_O2", "Urine_output", "RBC", "Leucocyte", "Platelets", 
                         "Neutrophils", "Lymphocyte", "PT", "Creatinine", "Urea_nitrogen", "Blood_sodium", "Blood_calcium", 
-                        "Anion_gap", "Magnesium_ion", "Bicarbonate", "Lactic_acid", "comorb_score", "tLOS", "outcome")
+                        "Anion_gap", "Magnesium_ion", "Bicarbonate", "Lactic_acid", "comorb_score", "outcome")
 RF_simplified_df <- RF_impute_df[, ..important_features]
 
 # Ensure the outcome variable has valid factor levels
