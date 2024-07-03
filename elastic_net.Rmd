@@ -12,11 +12,6 @@ library(data.table)
 
 ```
 
-```{r}
-
-```
-
-
 
 
 ```{r}
@@ -31,7 +26,7 @@ y <- mult_impute_df$outcome
 
 
 set.seed(510)  
-cv_fit <- cv.glmnet(x, y, family = "binomial", alpha = 0.5)  
+cv_fit <- cv.glmnet(x, y, family = "binomial", alpha = 0.5) #alpha = mix between lasso and ridge, with higher values being more lasso.
 
 
 best_lambda_enet <- cv_fit$lambda.min
