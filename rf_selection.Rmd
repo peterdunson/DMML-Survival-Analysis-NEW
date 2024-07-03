@@ -1,0 +1,203 @@
+---
+title: "random_forest"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+
+
+
+
+```{r}
+# Load necessary libraries
+library(data.table)
+library(randomForest)
+library(caret)
+library(pROC)
+
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Subset the data to exclude unnecessary columns
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
+
+# Ensure the outcome variable is included and properly named
+if (!("outcome" %in% names(RF_complete_df))) {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Ensure the outcome variable has valid factor levels
+RF_complete_df$outcome <- factor(RF_complete_df$outcome, levels = unique(RF_complete_df$outcome), labels = make.names(unique(RF_complete_df$outcome)))
+
+# Print the column names to verify
+cat("Column names in the dataset:\n")
+print(names(RF_complete_df))
+
+# Prepare the predictor matrix and outcome variable
+x_rf <- as.matrix(RF_complete_df[, setdiff(names(RF_complete_df), "outcome"), with = FALSE])
+y_rf <- RF_complete_df$outcome
+
+# Set seed for reproducibility
+set.seed(510)
+
+# Define cross-validation control
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = "final"
+)
+
+# Define the grid for hyperparameter tuning
+tune_grid <- expand.grid(
+  mtry = 10  # Number of variables randomly sampled as candidates at each split
+)
+
+# Train the Random Forest model using cross-validation with the specified parameters
+rf_cv_model <- train(
+  x = x_rf, 
+  y = y_rf,
+  method = "rf",
+  trControl = train_control,
+  tuneGrid = tune_grid,
+  metric = "ROC",
+  importance = TRUE,
+  ntree = 500,  # Number of trees
+  nodesize = 10  # Minimum size of terminal nodes
+)
+
+# Print the results of the cross-validation
+print(rf_cv_model)
+
+# Extract the cross-validated AUC
+auc <- rf_cv_model$results$ROC[rf_cv_model$results$ROC == max(rf_cv_model$results$ROC)]
+cat("Cross-validated AUC:", auc, "\n")
+
+# Predict on the test data (if you have a separate test set)
+# Here we use the cross-validated predictions
+predictions <- rf_cv_model$pred$pred
+probs <- rf_cv_model$pred[, make.names(levels(y_rf)[2])]  # Assuming the positive class is the second level
+
+# Calculate log-loss
+log_loss <- function(y_true, y_prob) {
+  epsilon <- 1e-15
+  y_prob <- pmax(epsilon, pmin(1 - epsilon, y_prob))
+  -mean(y_true * log(y_prob) + (1 - y_true) * log(1 - y_prob))
+}
+
+# Convert factor levels to 0 and 1 for log-loss calculation
+y_true <- ifelse(rf_cv_model$pred$obs == levels(y_rf)[2], 1, 0)
+log_loss_value <- log_loss(y_true, probs)
+cat("Cross-validated log-loss:", log_loss_value, "\n")
+
+# Extract feature importances correctly
+importance_rf <- varImp(rf_cv_model, scale = FALSE)
+importance_values <- importance_rf$importance[, 1]  # Extract importance values
+
+# Print feature importances
+cat("Feature importances from Random Forest (cross-validated):\n")
+print(importance_values)
+
+# Plot feature importances
+plot(importance_rf, main = "Variable Importance (Cross-Validated)")
+
+# Select important features based on a threshold
+important_vars <- rownames(importance_rf$importance)[importance_values > mean(importance_values)]
+cat("Selected important variables:\n")
+print(important_vars)
+
+
+```
+
+```{r}
+# Load necessary libraries
+library(data.table)
+library(randomForest)
+library(caret)
+library(pROC)
+
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Subset the data to include only selected important variables and outcome
+important_features <- c("Renal_failure", "heart_rate", "temperature", "SP_O2", "Urine_output", "RBC", "Leucocyte", "Platelets", 
+                        "Neutrophils", "Lymphocyte", "PT", "Creatinine", "Urea_nitrogen", "Blood_sodium", "Blood_calcium", 
+                        "Anion_gap", "Magnesium_ion", "Bicarbonate", "Lactic_acid", "comorb_score", "outcome")
+RF_simplified_df <- RF_impute_df[, ..important_features]
+
+# Ensure the outcome variable has valid factor levels
+RF_simplified_df$outcome <- factor(RF_simplified_df$outcome, levels = unique(RF_simplified_df$outcome), labels = make.names(unique(RF_simplified_df$outcome)))
+
+# Prepare the predictor matrix and outcome variable
+x_simplified <- as.matrix(RF_simplified_df[, -"outcome", with = FALSE])
+y_simplified <- RF_simplified_df$outcome
+
+# Set seed for reproducibility
+set.seed(510)
+
+# Define cross-validation control
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = "final"
+)
+
+# Train the Random Forest model using cross-validation with the simplified dataset
+rf_cv_model_simplified <- train(
+  x = x_simplified, 
+  y = y_simplified,
+  method = "rf",
+  trControl = train_control,
+  metric = "ROC",
+  importance = TRUE,
+  ntree = 500,  # Number of trees
+  nodesize = 10,  # Minimum size of terminal nodes
+  tuneGrid = expand.grid(mtry = 10)  # Number of variables randomly sampled as candidates at each split
+)
+
+# Print the results of the cross-validation
+print(rf_cv_model_simplified)
+
+# Extract the cross-validated AUC
+auc_simplified <- rf_cv_model_simplified$results$ROC[rf_cv_model_simplified$results$ROC == max(rf_cv_model_simplified$results$ROC)]
+cat("Cross-validated AUC for simplified model:", auc_simplified, "\n")
+
+# Predict on the test data (if you have a separate test set)
+# Here we use the cross-validated predictions
+predictions_simplified <- rf_cv_model_simplified$pred$pred
+probs_simplified <- rf_cv_model_simplified$pred[, make.names(levels(y_simplified)[2])]  # Assuming the positive class is the second level
+
+# Calculate log-loss
+log_loss <- function(y_true, y_prob) {
+  epsilon <- 1e-15
+  y_prob <- pmax(epsilon, pmin(1 - epsilon, y_prob))
+  -mean(y_true * log(y_prob) + (1 - y_true) * log(1 - y_prob))
+}
+
+# Convert factor levels to 0 and 1 for log-loss calculation
+y_true_simplified <- ifelse(rf_cv_model_simplified$pred$obs == levels(y_simplified)[2], 1, 0)
+log_loss_value_simplified <- log_loss(y_true_simplified, probs_simplified)
+cat("Cross-validated log-loss for simplified model:", log_loss_value_simplified, "\n")
+
+# Extract feature importances for the simplified model
+importance_rf_simplified <- varImp(rf_cv_model_simplified, scale = FALSE)
+
+# Print feature importances for the simplified model
+cat("Feature importances from Random Forest (simplified model):\n")
+print(importance_rf_simplified)
+
+# Plot feature importances for the simplified model
+plot(importance_rf_simplified, main = "Variable Importance (Cross-Validated, Simplified Model)")
+
+```
+
+
+
+
+
+

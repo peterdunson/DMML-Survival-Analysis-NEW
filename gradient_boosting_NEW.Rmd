@@ -1,0 +1,79 @@
+---
+title: "gradient_boosting"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+# Load necessary libraries
+
+library(xgboost)
+library(data.table)
+library(caret)
+
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Subset the data to exclude unnecessary columns and ensure the outcome variable is included and properly named
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
+
+# Ensure the outcome variable has valid factor levels
+RF_complete_df$outcome <- factor(RF_complete_df$outcome, levels = unique(RF_complete_df$outcome))
+
+# Prepare the predictor matrix and outcome variable
+x <- as.matrix(RF_complete_df[, setdiff(names(RF_complete_df), "outcome"), with = FALSE])
+y <- as.numeric(RF_complete_df$outcome) - 1  # Convert outcome to 0 and 1
+
+# Split the dataset into training and test sets
+set.seed(510)
+train_idx <- createDataPartition(y, p = 0.7, list = FALSE)
+x_train <- x[train_idx, ]
+y_train <- y[train_idx]
+x_test <- x[-train_idx, ]
+y_test <- y[-train_idx]
+
+# Create xgboost DMatrix
+dtrain <- xgb.DMatrix(data = x_train, label = y_train)
+dtest <- xgb.DMatrix(data = x_test, label = y_test)
+
+# Set parameters for xgboost
+params <- list(
+  objective = "binary:logistic",
+  eval_metric = "auc",
+  max_depth = 3,
+  eta = 0.1,
+  nthread = 2
+)
+
+# Train the model
+xgb_model <- xgb.train(params, dtrain, nrounds = 100, watchlist = list(eval = dtest, train = dtrain), verbose = 1)
+
+# Get feature importance
+importance_matrix <- xgb.importance(feature_names = colnames(x_train), model = xgb_model)
+print(importance_matrix)
+
+# Plot feature importance
+xgb.plot.importance(importance_matrix, main = "Feature Importance (Gradient Boosting)")
+
+# Evaluate model performance
+pred <- predict(xgb_model, newdata = x_test)
+auc <- roc(y_test, pred)$auc
+cat("AUC:", auc, "\n")
+
+# Calculate log-loss
+log_loss <- function(y_true, y_prob) {
+  epsilon <- 1e-15
+  y_prob <- pmax(epsilon, pmin(1 - epsilon, y_prob))
+  -mean(y_true * log(y_prob) + (1 - y_true) * log(1 - y_prob))
+}
+log_loss_value <- log_loss(y_test, pred)
+cat("Log-loss:", log_loss_value, "\n")
+
+```
+
+
+
+
+
+
