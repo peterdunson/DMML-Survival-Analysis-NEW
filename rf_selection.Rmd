@@ -438,30 +438,29 @@ log_loss <- function(y_true, y_prob) {
   y_prob <- pmax(epsilon, pmin(1 - epsilon, y_prob))
   -mean(y_true * log(y_prob) + (1 - y_true) * log(1 - y_prob))
 }
-
-# Extract the cross-validated predictions
-predictions <- rf_cv_model$pred
-probs <- predictions[, make.names(levels(y_rf)[2])]  # Assuming the positive class is the second level
-
-# Convert factor levels to 0 and 1 for log-loss calculation
-y_true <- ifelse(predictions$obs == levels(y_rf)[2], 1, 0)
+y_true <- ifelse(rf_cv_model$pred$obs == levels(y_rf)[2], 1, 0)
+probs <- rf_cv_model$pred[, make.names(levels(y_rf)[2])]  # Assuming the positive class is the second level
 log_loss_value <- log_loss(y_true, probs)
 cat("Cross-validated log-loss:", log_loss_value, "\n")
 
-# Confusion matrix for the cross-validated predictions
-pred_class <- ifelse(probs > 0.5, 1, 0)
-conf_matrix <- table(Predicted = pred_class, Actual = y_true)
-print(conf_matrix)
+# Extract feature importances correctly
+importance_rf <- varImp(rf_cv_model, scale = FALSE)
+importance_values <- importance_rf$importance[, 1]  # Extract importance values
 
-# Function to plot learning curves
-plot_learning_curve <- function(train_sizes, train_scores, test_scores) {
-  plot(train_sizes, train_scores, type = "o", col = "blue", ylim = range(c(train_scores, test_scores)), xlab = "Training Size", ylab = "Score", main = "Learning Curves")
-  lines(train_sizes, test_scores, type = "o", col = "red")
-  legend("bottomright", legend = c("Train", "Validation"), col = c("blue", "red"), lty = 1)
-}
+# Print feature importances
+cat("Feature importances from Random Forest (cross-validated):\n")
+print(importance_values)
+
+# Plot feature importances
+plot(importance_rf, main = "Variable Importance (Cross-Validated)")
+
+# Select important features based on a threshold
+important_vars <- rownames(importance_rf$importance)[importance_values > mean(importance_values)]
+cat("Selected important variables:\n")
+print(important_vars)
 
 # Generate learning curves
-train_sizes <- seq(0.1, 0.9, by = 0.1)  # Use up to 0.9 to avoid issues with full dataset
+train_sizes <- seq(0.1, 1.0, by = 0.1)
 train_scores <- numeric(length(train_sizes))
 test_scores <- numeric(length(train_sizes))
 
@@ -470,36 +469,49 @@ for (i in seq_along(train_sizes)) {
   train_idx <- createDataPartition(y_rf, p = train_size, list = FALSE)
   x_train_part <- x_rf[train_idx, ]
   y_train_part <- y_rf[train_idx]
-  x_test_part <- x_rf[-train_idx, ]
-  y_test_part <- y_rf[-train_idx]
   
-  # Ensure x_test_part is not empty
-  if (nrow(x_test_part) == 0) {
-    next
+  if (length(train_idx) > 0 && nrow(x_train_part) > 0 && nrow(x_rf[-train_idx, ]) > 0) {
+    rf_cv_model_part <- train(
+      x = x_train_part,
+      y = y_train_part,
+      method = "rf",
+      trControl = train_control,
+      tuneGrid = tune_grid,
+      metric = "ROC",
+      importance = TRUE,
+      ntree = 500,  # Number of trees
+      nodesize = 10  # Minimum size of terminal nodes
+    )
+    train_pred <- predict(rf_cv_model_part, newdata = x_train_part, type = "prob")[, 2]  # Probabilities for positive class
+    test_pred <- predict(rf_cv_model_part, newdata = x_rf[-train_idx, ], type = "prob")[, 2]  # Probabilities for positive class
+
+    # Calculate AUC for training and test sets
+    train_scores[i] <- roc(as.numeric(y_train_part) - 1, train_pred)$auc
+    test_scores[i] <- roc(as.numeric(y_rf[-train_idx]) - 1, test_pred)$auc
+  } else {
+    train_scores[i] <- NA
+    test_scores[i] <- NA
   }
-  
-  rf_cv_model_part <- train(
-    x = x_train_part,
-    y = y_train_part,
-    method = "rf",
-    trControl = train_control,
-    tuneGrid = tune_grid,
-    metric = "ROC",
-    importance = TRUE,
-    ntree = 500,  # Number of trees
-    nodesize = 10  # Minimum size of terminal nodes
-  )
-  
-  train_pred <- predict(rf_cv_model_part, newdata = x_train_part, type = "prob")[, 2]  # Probability of positive class
-  test_pred <- predict(rf_cv_model_part, newdata = x_test_part, type = "prob")[, 2]  # Probability of positive class
-  
-  # Calculate AUC for training and test sets
-  train_scores[i] <- roc(as.numeric(y_train_part) - 1, train_pred)$auc
-  test_scores[i] <- roc(as.numeric(y_test_part) - 1, test_pred)$auc
 }
 
 # Plot learning curves
+plot_learning_curve <- function(train_sizes, train_scores, test_scores) {
+  plot(train_sizes, train_scores, type = "o", col = "blue", ylim = range(c(train_scores, test_scores), na.rm = TRUE), xlab = "Training Size", ylab = "Score", main = "Learning Curves")
+  lines(train_sizes, test_scores, type = "o", col = "red")
+  legend("bottomright", legend = c("Train", "Validation"), col = c("blue", "red"), lty = 1)
+}
+
 plot_learning_curve(train_sizes, train_scores, test_scores)
+
+cat("Training AUCs:", train_scores, "\n")
+cat("Validation AUCs:", test_scores, "\n")
+
+# Confusion matrix on full training set
+full_train_pred <- predict(rf_cv_model, newdata = x_rf, type = "prob")[, 2]
+full_train_pred_class <- ifelse(full_train_pred > 0.5, 1, 0)
+conf_matrix <- table(Predicted = full_train_pred_class, Actual = as.numeric(y_rf) - 1)
+print(conf_matrix)
+
 
 ```
 
