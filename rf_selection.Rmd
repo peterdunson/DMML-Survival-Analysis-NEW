@@ -201,3 +201,308 @@ plot(importance_rf_simplified, main = "Variable Importance (Cross-Validated, Sim
 
 
 
+
+
+
+
+```{r}
+# Load necessary libraries
+library(data.table)
+library(randomForest)
+library(caret)
+library(pROC)
+
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Subset the data to exclude unnecessary columns
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
+
+# Ensure the outcome variable is included and properly named
+if (!("outcome" %in% names(RF_complete_df))) {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Ensure the outcome variable has valid factor levels
+RF_complete_df$outcome <- factor(RF_complete_df$outcome, levels = unique(RF_complete_df$outcome), labels = make.names(unique(RF_complete_df$outcome)))
+
+# Print the column names to verify
+cat("Column names in the dataset:\n")
+print(names(RF_complete_df))
+
+# Prepare the predictor matrix and outcome variable
+x_rf <- as.matrix(RF_complete_df[, setdiff(names(RF_complete_df), "outcome"), with = FALSE])
+y_rf <- RF_complete_df$outcome
+
+# Set seed for reproducibility
+set.seed(510)
+
+# Define cross-validation control
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = "final"
+)
+
+# Define the grid for hyperparameter tuning
+tune_grid <- expand.grid(
+  mtry = 10  # Number of variables randomly sampled as candidates at each split
+)
+
+# Train the Random Forest model using cross-validation with the specified parameters
+rf_cv_model <- train(
+  x = x_rf, 
+  y = y_rf,
+  method = "rf",
+  trControl = train_control,
+  tuneGrid = tune_grid,
+  metric = "ROC",
+  importance = TRUE,
+  ntree = 500,  # Number of trees
+  nodesize = 10  # Minimum size of terminal nodes
+)
+
+# Print the results of the cross-validation
+print(rf_cv_model)
+
+# Extract the cross-validated AUC
+auc <- rf_cv_model$results$ROC[rf_cv_model$results$ROC == max(rf_cv_model$results$ROC)]
+cat("Cross-validated AUC:", auc, "\n")
+
+# Predict on the cross-validated data
+predictions <- rf_cv_model$pred$pred
+probs <- rf_cv_model$pred[, make.names(levels(y_rf)[2])]  # Assuming the positive class is the second level
+
+# Calculate log-loss
+log_loss <- function(y_true, y_prob) {
+  epsilon <- 1e-15
+  y_prob <- pmax(epsilon, pmin(1 - epsilon, y_prob))
+  -mean(y_true * log(y_prob) + (1 - y_true) * log(1 - y_prob))
+}
+
+# Convert factor levels to 0 and 1 for log-loss calculation
+y_true <- ifelse(rf_cv_model$pred$obs == levels(y_rf)[2], 1, 0)
+log_loss_value <- log_loss(y_true, probs)
+cat("Cross-validated log-loss:", log_loss_value, "\n")
+
+# Extract feature importances correctly
+importance_rf <- varImp(rf_cv_model, scale = FALSE)
+importance_values <- importance_rf$importance[, 1]  # Extract importance values
+
+# Print feature importances
+cat("Feature importances from Random Forest (cross-validated):\n")
+print(importance_values)
+
+# Plot feature importances
+plot(importance_rf, main = "Variable Importance (Cross-Validated)")
+
+# Select important features based on a threshold
+important_vars <- rownames(importance_rf$importance)[importance_values > mean(importance_values)]
+cat("Selected important variables:\n")
+print(important_vars)
+
+# Confusion matrix for cross-validated predictions
+conf_matrix <- confusionMatrix(predictions, rf_cv_model$pred$obs)
+print(conf_matrix)
+
+# Function to plot learning curves
+plot_learning_curve <- function(train_sizes, train_scores, test_scores) {
+  plot(train_sizes, train_scores, type = "o", col = "blue", ylim = range(c(train_scores, test_scores)), xlab = "Training Size", ylab = "Score", main = "Learning Curves")
+  lines(train_sizes, test_scores, type = "o", col = "red")
+  legend("bottomright", legend = c("Train", "Validation"), col = c("blue", "red"), lty = 1)
+}
+
+# Generate learning curves
+train_sizes <- seq(0.1, 1.0, by = 0.1)
+train_scores <- numeric(length(train_sizes))
+test_scores <- numeric(length(train_sizes))
+
+for (i in seq_along(train_sizes)) {
+  train_size <- train_sizes[i]
+  train_idx <- createDataPartition(y_rf, p = train_size, list = FALSE)
+  x_train_part <- x_rf[train_idx, ]
+  y_train_part <- y_rf[train_idx]
+  
+  rf_partial_model <- randomForest(x = x_train_part, y = as.factor(y_train_part), mtry = 10, ntree = 500, nodesize = 10)
+  
+  train_pred <- predict(rf_partial_model, newdata = x_train_part, type = "prob")[, 2]
+  test_pred <- predict(rf_partial_model, newdata = x_rf, type = "prob")[, 2]
+  
+  # Calculate AUC for training and test sets
+  train_scores[i] <- roc(y_train_part, train_pred)$auc
+  test_scores[i] <- roc(y_rf, test_pred)$auc
+}
+
+# Plot learning curves
+plot_learning_curve(train_sizes, train_scores, test_scores)
+cat("Training AUCs:", train_scores, "\n")
+cat("Validation AUCs:", test_scores, "\n")
+
+# Calculate log-loss for different training sizes
+train_log_loss <- numeric(length(train_sizes))
+test_log_loss <- numeric(length(train_sizes))
+
+for (i in seq_along(train_sizes)) {
+  train_size <- train_sizes[i]
+  train_idx <- createDataPartition(y_rf, p = train_size, list = FALSE)
+  x_train_part <- x_rf[train_idx, ]
+  y_train_part <- y_rf[train_idx]
+  
+  rf_partial_model <- randomForest(x = x_train_part, y = as.factor(y_train_part), mtry = 10, ntree = 500, nodesize = 10)
+  
+  train_pred <- predict(rf_partial_model, newdata = x_train_part, type = "prob")[, 2]
+  test_pred <- predict(rf_partial_model, newdata = x_rf, type = "prob")[, 2]
+  
+  train_log_loss[i] <- log_loss(ifelse(y_train_part == levels(y_rf)[2], 1, 0), train_pred)
+  test_log_loss[i] <- log_loss(ifelse(y_rf == levels(y_rf)[2], 1, 0), test_pred)
+}
+
+cat("Training Log-loss:", train_log_loss, "\n")
+cat("Validation Log-loss:", test_log_loss, "\n")
+
+
+```
+
+
+```{r}
+# Load necessary libraries
+library(data.table)
+library(randomForest)
+library(caret)
+library(pROC)
+
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Subset the data to exclude unnecessary columns
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
+
+# Ensure the outcome variable is included and properly named
+if (!("outcome" %in% names(RF_complete_df))) {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Ensure the outcome variable has valid factor levels
+RF_complete_df$outcome <- factor(RF_complete_df$outcome, levels = unique(RF_complete_df$outcome), labels = make.names(unique(RF_complete_df$outcome)))
+
+# Print the column names to verify
+cat("Column names in the dataset:\n")
+print(names(RF_complete_df))
+
+# Prepare the predictor matrix and outcome variable
+x_rf <- as.matrix(RF_complete_df[, setdiff(names(RF_complete_df), "outcome"), with = FALSE])
+y_rf <- RF_complete_df$outcome
+
+# Set seed for reproducibility
+set.seed(510)
+
+# Define cross-validation control
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  classProbs = TRUE,
+  summaryFunction = twoClassSummary,
+  savePredictions = "final"
+)
+
+# Define the grid for hyperparameter tuning
+tune_grid <- expand.grid(
+  mtry = 10  # Number of variables randomly sampled as candidates at each split
+)
+
+# Train the Random Forest model using cross-validation with the specified parameters
+rf_cv_model <- train(
+  x = x_rf, 
+  y = y_rf,
+  method = "rf",
+  trControl = train_control,
+  tuneGrid = tune_grid,
+  metric = "ROC",
+  importance = TRUE,
+  ntree = 500,  # Number of trees
+  nodesize = 10  # Minimum size of terminal nodes
+)
+
+# Print the results of the cross-validation
+print(rf_cv_model)
+
+# Extract the cross-validated AUC
+auc <- max(rf_cv_model$results$ROC)
+cat("Cross-validated AUC:", auc, "\n")
+
+# Extract the cross-validated log-loss
+log_loss <- function(y_true, y_prob) {
+  epsilon <- 1e-15
+  y_prob <- pmax(epsilon, pmin(1 - epsilon, y_prob))
+  -mean(y_true * log(y_prob) + (1 - y_true) * log(1 - y_prob))
+}
+
+# Extract the cross-validated predictions
+predictions <- rf_cv_model$pred
+probs <- predictions[, make.names(levels(y_rf)[2])]  # Assuming the positive class is the second level
+
+# Convert factor levels to 0 and 1 for log-loss calculation
+y_true <- ifelse(predictions$obs == levels(y_rf)[2], 1, 0)
+log_loss_value <- log_loss(y_true, probs)
+cat("Cross-validated log-loss:", log_loss_value, "\n")
+
+# Confusion matrix for the cross-validated predictions
+pred_class <- ifelse(probs > 0.5, 1, 0)
+conf_matrix <- table(Predicted = pred_class, Actual = y_true)
+print(conf_matrix)
+
+# Function to plot learning curves
+plot_learning_curve <- function(train_sizes, train_scores, test_scores) {
+  plot(train_sizes, train_scores, type = "o", col = "blue", ylim = range(c(train_scores, test_scores)), xlab = "Training Size", ylab = "Score", main = "Learning Curves")
+  lines(train_sizes, test_scores, type = "o", col = "red")
+  legend("bottomright", legend = c("Train", "Validation"), col = c("blue", "red"), lty = 1)
+}
+
+# Generate learning curves
+train_sizes <- seq(0.1, 0.9, by = 0.1)  # Use up to 0.9 to avoid issues with full dataset
+train_scores <- numeric(length(train_sizes))
+test_scores <- numeric(length(train_sizes))
+
+for (i in seq_along(train_sizes)) {
+  train_size <- train_sizes[i]
+  train_idx <- createDataPartition(y_rf, p = train_size, list = FALSE)
+  x_train_part <- x_rf[train_idx, ]
+  y_train_part <- y_rf[train_idx]
+  x_test_part <- x_rf[-train_idx, ]
+  y_test_part <- y_rf[-train_idx]
+  
+  # Ensure x_test_part is not empty
+  if (nrow(x_test_part) == 0) {
+    next
+  }
+  
+  rf_cv_model_part <- train(
+    x = x_train_part,
+    y = y_train_part,
+    method = "rf",
+    trControl = train_control,
+    tuneGrid = tune_grid,
+    metric = "ROC",
+    importance = TRUE,
+    ntree = 500,  # Number of trees
+    nodesize = 10  # Minimum size of terminal nodes
+  )
+  
+  train_pred <- predict(rf_cv_model_part, newdata = x_train_part, type = "prob")[, 2]  # Probability of positive class
+  test_pred <- predict(rf_cv_model_part, newdata = x_test_part, type = "prob")[, 2]  # Probability of positive class
+  
+  # Calculate AUC for training and test sets
+  train_scores[i] <- roc(as.numeric(y_train_part) - 1, train_pred)$auc
+  test_scores[i] <- roc(as.numeric(y_test_part) - 1, test_pred)$auc
+}
+
+# Plot learning curves
+plot_learning_curve(train_sizes, train_scores, test_scores)
+
+```
+
+
+
+
