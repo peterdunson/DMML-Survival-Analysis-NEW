@@ -115,13 +115,17 @@ params <- list(
   nthread = 2
 )
 
-# Train the model with cross-validation
+# Perform cross-validation to find the best number of rounds
 cv <- xgb.cv(params, dtrain, nrounds = 100, nfold = 10, metrics = "auc", stratified = TRUE, verbose = 1)
 
-# Get the best number of rounds
-best_nrounds <- cv$best_iteration
+# Print the structure of the cv object to understand its content
+str(cv)
 
-# Train the final model
+# Manually identify the best number of rounds based on the evaluation metric
+best_nrounds <- which.max(cv$evaluation_log$test_auc_mean)
+cat("Best number of rounds:", best_nrounds, "\n")
+
+# Train the final model using the best number of rounds
 xgb_model <- xgb.train(params, dtrain, nrounds = best_nrounds, watchlist = list(eval = dtest, train = dtrain), verbose = 1)
 
 # Get feature importance
@@ -179,12 +183,27 @@ for (i in seq_along(train_sizes)) {
   train_pred <- predict(model, newdata = x_train_part)
   test_pred <- predict(model, newdata = x_test)
   
-  train_scores[i] <- auc(y_train_part, train_pred)
-  test_scores[i] <- auc(y_test, test_pred)
+  # Ensure no NA values in predictions
+  if (anyNA(train_pred) || anyNA(test_pred)) {
+    stop("Predictions contain NA values.")
+  }
+  
+  # Ensure lengths match
+  if (length(y_train_part) != length(train_pred)) {
+    stop("Length of y_train_part and train_pred do not match.")
+  }
+  if (length(y_test) != length(test_pred)) {
+    stop("Length of y_test and test_pred do not match.")
+  }
+  
+  # Calculate AUC for training and test sets
+  train_scores[i] <- roc(y_train_part, train_pred)$auc
+  test_scores[i] <- roc(y_test, test_pred)$auc
 }
 
 # Plot learning curves
 plot_learning_curve(train_sizes, train_scores, test_scores)
+
 
 ```
 
