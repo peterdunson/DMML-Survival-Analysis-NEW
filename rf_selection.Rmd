@@ -366,6 +366,8 @@ cat("Validation Log-loss:", test_log_loss, "\n")
 ```
 
 
+
+extremely overfit:
 ```{r}
 # Load necessary libraries
 library(data.table)
@@ -486,21 +488,22 @@ for (i in seq_along(train_sizes)) {
     test_pred <- predict(rf_cv_model_part, newdata = x_rf[-train_idx, ], type = "prob")[, 2]  # Probabilities for positive class
 
     # Calculate AUC for training and test sets
-    train_scores[i] <- roc(as.numeric(y_train_part) - 1, train_pred)$auc
-    test_scores[i] <- roc(as.numeric(y_rf[-train_idx]) - 1, test_pred)$auc
+    train_scores[i] <- roc(response = as.numeric(y_train_part) - 1, predictor = train_pred)$auc
+    test_scores[i] <- roc(response = as.numeric(y_rf[-train_idx]) - 1, predictor = test_pred)$auc
   } else {
     train_scores[i] <- NA
     test_scores[i] <- NA
   }
 }
 
-# Plot learning curves
+# Function to plot learning curves
 plot_learning_curve <- function(train_sizes, train_scores, test_scores) {
   plot(train_sizes, train_scores, type = "o", col = "blue", ylim = range(c(train_scores, test_scores), na.rm = TRUE), xlab = "Training Size", ylab = "Score", main = "Learning Curves")
   lines(train_sizes, test_scores, type = "o", col = "red")
   legend("bottomright", legend = c("Train", "Validation"), col = c("blue", "red"), lty = 1)
 }
 
+# Plot the learning curves
 plot_learning_curve(train_sizes, train_scores, test_scores)
 
 cat("Training AUCs:", train_scores, "\n")
@@ -515,6 +518,11 @@ print(conf_matrix)
 
 ```
 
+
+less overfit data??
+```{r}
+
+```
 
 
 
