@@ -613,23 +613,18 @@ train_control <- trainControl(
   savePredictions = "final"
 )
 
-# Define the grid for hyperparameter tuning
-tune_grid <- expand.grid(
-  mtry = seq(2, 10, 2)  # Number of variables randomly sampled as candidates at each split
-)
-
-# Train the Random Forest model using cross-validation with the specified parameters
+# Train the Random Forest model with more trees and wider hyperparameter tuning
 rf_cv_model <- train(
   x = x_rf_train, 
   y = y_rf_train,
   method = "rf",
   trControl = train_control,
-  tuneGrid = tune_grid,
+  tuneLength = 10,
   metric = "ROC",
   importance = TRUE,
-  ntree = 100,  # Number of trees
-  nodesize = 5,  # Minimum size of terminal nodes
-  maxnodes = 30  # Maximum number of terminal nodes
+  ntree = 500,  # Increased number of trees
+  nodesize = 10,  # Increased minimum size of terminal nodes for regularization
+  maxnodes = 20  # Reduced maximum number of terminal nodes for regularization
 )
 
 # Print the results of the cross-validation
@@ -674,12 +669,12 @@ for (i in seq_along(train_sizes)) {
       y = y_train_part,
       method = "rf",
       trControl = train_control,
-      tuneGrid = tune_grid,
+      tuneLength = 10,
       metric = "ROC",
       importance = TRUE,
-      ntree = 100,  # Number of trees
-      nodesize = 5,  # Minimum size of terminal nodes
-      maxnodes = 30  # Maximum number of terminal nodes
+      ntree = 500,  # Increased number of trees
+      nodesize = 10,  # Increased minimum size of terminal nodes
+      maxnodes = 20  # Reduced maximum number of terminal nodes
     )
     train_pred <- predict(rf_cv_model_part, newdata = x_train_part, type = "prob")[, 2]  # Probabilities for positive class
     test_pred <- predict(rf_cv_model_part, newdata = x_rf_train[-train_idx, ], type = "prob")[, 2]  # Probabilities for positive class
