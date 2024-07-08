@@ -218,6 +218,22 @@ library(ROCR)
 # Fit the final model on the training data
 final_model <- glmnet(x_train, y_train, family = "binomial", alpha = best_alpha, lambda = best_lambda)
 
+#predict on the train data
+predictions <- predict(final_model, s = best_lambda, newx = x_train, type = "response")
+
+# Calculate AUC
+pred <- prediction(predictions, y_train)
+perf <- performance(pred, measure = "auc")
+auc <- perf@y.values[[1]]
+cat("AUC:", auc, "\n")
+
+# Optionally, plot the ROC curve
+roc_perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+plot(roc_perf, col = "blue", lwd = 2, main = "ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = "red")
+
+#----------------------------------------------------------------------------------------------
+
 # Predict on the test data
 predictions <- predict(final_model, s = best_lambda, newx = x_test, type = "response")
 
