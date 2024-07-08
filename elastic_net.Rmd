@@ -52,6 +52,7 @@ cat("Selected covariates:", selected_covariates, "\n")
 # Load necessary libraries
 library(glmnet)
 library(data.table)
+library(pROC)
 
 # Convert data.frame to data.table
 dt <- as.data.table(RF_complete_df)
@@ -95,6 +96,7 @@ alpha_values <- seq(0, 1, by = 0.1)
 best_alpha <- NULL
 best_lambda <- NULL
 best_log_loss <- Inf
+best_auc <- -Inf
 
 # Function to calculate log-loss
 log_loss <- function(y_true, y_pred) {
@@ -114,6 +116,7 @@ for (alpha in alpha_values) {
   folds <- sample(rep(1:k, length.out = length(y_train)))  # Randomly assign data to folds
   
   cv_errors <- c()  # To store cross-validation errors
+  auc_values <- c()  # To store cross-validation AUC values
   
   for (i in 1:k) {
     # Split the data into training and validation sets
@@ -130,22 +133,34 @@ for (alpha in alpha_values) {
     
     # Predict on the validation fold data
     predictions <- predict(model, s = lambda_min, newx = x_valid_fold, type = "response")
+    predictions <- as.numeric(predictions)  # Ensure predictions are numeric vector
     
     # Calculate the validation error (log-loss)
     cv_errors <- c(cv_errors, log_loss(y_valid_fold, predictions))
+    
+    # Calculate the validation AUC
+    auc <- roc(y_valid_fold, predictions)$auc
+    auc_values <- c(auc_values, auc)
   }
   
-  # Calculate the mean cross-validated log-loss for the current alpha
+  # Calculate the mean cross-validated log-loss and AUC for the current alpha
   mean_log_loss <- mean(cv_errors)
+  mean_auc <- mean(auc_values)
   
-  # Update the best alpha and lambda if the current log-loss is lower
+  # Update the best alpha and lambda if the current log-loss is lower or AUC is higher
   if (mean_log_loss < best_log_loss) {
     best_log_loss <- mean_log_loss
     best_alpha <- alpha
     best_lambda <- lambda_min
   }
   
-  cat("Alpha:", alpha, "Mean log-loss:", mean_log_loss, "\n")
+  if (mean_auc > best_auc) {
+    best_auc <- mean_auc
+    best_alpha <- alpha
+    best_lambda <- lambda_min
+  }
+  
+  cat("Alpha:", alpha, "Mean log-loss:", mean_log_loss, "Mean AUC:", mean_auc, "\n")
 }
 
 # Print the best alpha and lambda
@@ -155,12 +170,31 @@ cat("Best lambda:", best_lambda, "\n")
 # Fit the final model using the best alpha and lambda on the full training data
 final_model <- glmnet(x_train, y_train, family = "binomial", alpha = best_alpha, lambda = best_lambda)
 
+# Predict on the training data
+train_predictions <- predict(final_model, s = best_lambda, newx = x_train, type = "response")
+train_predictions <- as.numeric(train_predictions)  # Ensure predictions are numeric vector
+
+# Calculate log-loss on the training data
+train_log_loss <- log_loss(y_train, train_predictions)
+cat("Train log-loss:", train_log_loss, "\n")
+
+# Calculate AUC on the training data
+train_roc <- roc(y_train, train_predictions)
+train_auc <- train_roc$auc
+cat("Train AUC:", train_auc, "\n")
+
 # Predict on the test data
 test_predictions <- predict(final_model, s = best_lambda, newx = x_test, type = "response")
+test_predictions <- as.numeric(test_predictions)  # Ensure predictions are numeric vector
 
 # Calculate log-loss on the test data
 test_log_loss <- log_loss(y_test, test_predictions)
 cat("Test log-loss:", test_log_loss, "\n")
+
+# Calculate AUC on the test data
+test_roc <- roc(y_test, test_predictions)
+test_auc <- test_roc$auc
+cat("Test AUC:", test_auc, "\n")
 
 # Extract the coefficients from the final model
 coefficients <- coef(final_model)
@@ -169,7 +203,6 @@ print(coefficients)
 # Identify the selected covariates (non-zero coefficients)
 selected_covariates <- rownames(coefficients)[which(coefficients != 0)]
 cat("Selected covariates:", selected_covariates, "\n")
-
 
 ```
 

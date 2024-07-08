@@ -1,0 +1,185 @@
+---
+title: "BART"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r}
+library(BART)
+```
+
+
+improved BART?
+```{r}
+# Load necessary libraries
+library(BART)
+library(caret)
+library(pROC)
+library(data.table)
+
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Subset the data to exclude unnecessary columns and ensure the outcome variable is included and properly named
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
+
+# Ensure the outcome variable has valid factor levels
+RF_complete_df$outcome <- as.factor(RF_complete_df$outcome)
+
+# Split the dataset into training and test sets
+set.seed(403)
+train_idx <- createDataPartition(RF_complete_df$outcome, p = 0.8, list = FALSE)
+train_data <- RF_complete_df[train_idx, ]
+test_data <- RF_complete_df[-train_idx, ]
+
+# Define predictor matrix and outcome variable for training data
+x_train <- as.matrix(train_data[, setdiff(names(train_data), "outcome"), with = FALSE])
+y_train <- as.numeric(as.character(train_data$outcome))  # Convert outcome to numeric for BART
+
+# Define predictor matrix and outcome variable for test data
+x_test <- as.matrix(test_data[, setdiff(names(test_data), "outcome"), with = FALSE])
+y_test <- as.numeric(as.character(test_data$outcome))  # Convert outcome to numeric for BART
+
+# Fit the BART model for binary outcome
+set.seed(403)
+bart_model <- pbart(x.train = x_train, y.train = y_train, x.test = x_test)
+
+# Predict on the training data
+train_pred_probs <- bart_model$prob.train.mean
+train_pred_class <- ifelse(train_pred_probs > 0.5, 1, 0)
+
+# Predict on the test data
+test_pred_probs <- bart_model$prob.test.mean
+test_pred_class <- ifelse(test_pred_probs > 0.5, 1, 0)
+
+# Function to calculate and print performance metrics
+evaluate_performance <- function(y_true, y_prob, pred_class, dataset_name) {
+  roc_obj <- roc(y_true, y_prob)
+  auc <- roc_obj$auc
+  log_loss <- function(y_true, y_prob) {
+    epsilon <- 1e-15
+    y_prob <- pmax(epsilon, pmin(1 - epsilon, y_prob))
+    -mean(y_true * log(y_prob) + (1 - y_true) * log(1 - y_prob))
+  }
+  log_loss_value <- log_loss(y_true, y_prob)
+  conf_matrix <- table(Predicted = pred_class, Actual = y_true)
+  
+  cat("\n", dataset_name, " Performance Metrics:\n", sep="")
+  cat("AUC:", auc, "\n")
+  cat("Log-loss:", log_loss_value, "\n")
+  cat("Confusion Matrix:\n")
+  print(conf_matrix)
+  
+  list(auc = auc, log_loss = log_loss_value, conf_matrix = conf_matrix)
+}
+
+# Evaluate performance on the training set
+train_performance <- evaluate_performance(y_train, train_pred_probs, train_pred_class, "Training Set")
+
+# Evaluate performance on the test set
+test_performance <- evaluate_performance(y_test, test_pred_probs, test_pred_class, "Test Set")
+
+
+
+```
+
+```{r}
+# Load necessary libraries
+library(BART)
+library(caret)
+library(pROC)
+library(data.table)
+
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Subset the data to exclude unnecessary columns and ensure the outcome variable is included and properly named
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
+
+# Ensure the outcome variable has valid factor levels
+RF_complete_df$outcome <- as.factor(RF_complete_df$outcome)
+
+# Split the dataset into training and test sets
+set.seed(403)
+train_idx <- createDataPartition(RF_complete_df$outcome, p = 0.8, list = FALSE)
+train_data <- RF_complete_df[train_idx, ]
+test_data <- RF_complete_df[-train_idx, ]
+
+# Define predictor matrix and outcome variable for training data
+x_train <- as.matrix(train_data[, setdiff(names(train_data), "outcome"), with = FALSE])
+y_train <- as.numeric(as.character(train_data$outcome))  # Convert outcome to numeric for BART
+
+# Define predictor matrix and outcome variable for test data
+x_test <- as.matrix(test_data[, setdiff(names(test_data), "outcome"), with = FALSE])
+y_test <- as.numeric(as.character(test_data$outcome))  # Convert outcome to numeric for BART
+
+# Fit the BART model for binary outcome
+set.seed(403)
+bart_model <- pbart(x.train = x_train, y.train = y_train, x.test = x_test)
+
+# Predict on the training data
+train_pred_probs <- bart_model$prob.train.mean
+train_pred_class <- ifelse(train_pred_probs > 0.5, 1, 0)
+
+# Predict on the test data
+test_pred_probs <- bart_model$prob.test.mean
+test_pred_class <- ifelse(test_pred_probs > 0.5, 1, 0)
+
+# Function to calculate and print performance metrics
+evaluate_performance <- function(y_true, y_prob, pred_class, dataset_name) {
+  roc_obj <- roc(y_true, y_prob)
+  auc <- roc_obj$auc
+  log_loss <- function(y_true, y_prob) {
+    epsilon <- 1e-15
+    y_prob <- pmax(epsilon, pmin(1 - epsilon, y_prob))
+    -mean(y_true * log(y_prob) + (1 - y_true) * log(1 - y_prob))
+  }
+  log_loss_value <- log_loss(y_true, y_prob)
+  conf_matrix <- table(Predicted = pred_class, Actual = y_true)
+  
+  cat("\n", dataset_name, " Performance Metrics:\n", sep="")
+  cat("AUC:", auc, "\n")
+  cat("Log-loss:", log_loss_value, "\n")
+  cat("Confusion Matrix:\n")
+  print(conf_matrix)
+  
+  list(auc = auc, log_loss = log_loss_value, conf_matrix = conf_matrix)
+}
+
+# Evaluate performance on the training set
+train_performance <- evaluate_performance(y_train, train_pred_probs, train_pred_class, "Training Set")
+
+# Evaluate performance on the test set
+test_performance <- evaluate_performance(y_test, test_pred_probs, test_pred_class, "Test Set")
+
+# Function to calculate permutation importance
+permutation_importance <- function(model, x, y, metric, n_repeats = 5) {
+  original_metric <- metric(y, predict(model, newdata = x))
+  importance <- rep(0, ncol(x))
+  
+  for (i in seq_along(importance)) {
+    for (j in 1:n_repeats) {
+      x_permuted <- x
+      x_permuted[, i] <- sample(x_permuted[, i])
+      permuted_metric <- metric(y, predict(model, newdata = x_permuted))
+      importance[i] <- importance[i] + (original_metric - permuted_metric)
+    }
+    importance[i] <- importance[i] / n_repeats
+  }
+  
+  importance
+}
+
+# Calculate AUC metric for permutation importance
+auc_metric <- function(y_true, y_prob) {
+  roc_obj <- roc(y_true, y_prob)
+  auc(roc_obj)
+}
+
+
+```
+
+
+

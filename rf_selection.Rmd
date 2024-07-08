@@ -461,9 +461,8 @@ rf_cv_model <- train(
   tuneLength = 10,
   metric = "ROC",
   importance = TRUE,
-  ntree = 500,  # Increased number of trees
-  nodesize = 10,  # Increased minimum size of terminal nodes for regularization
-  maxnodes = 20  # Reduced maximum number of terminal nodes for regularization
+  ntree = 100,  # Increased number of trees
+  nodesize = 20,  # Increased minimum size of terminal nodes for regularization
 )
 
 # Print the results of the cross-validation
