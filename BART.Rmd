@@ -182,15 +182,16 @@ auc_metric <- function(y_true, y_prob) {
 ```
 
 
-
+unit free??
 ```{r}
-RF_impute_df <- fread("RF_imputation_NEW.csv")
-RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap))
-
 # Load necessary libraries
 library(BART)
 library(data.table)
 library(pROC)
+library(caret)
+
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
 
 # Load and preprocess the data
 dt <- as.data.table(RF_complete_df)
@@ -217,14 +218,17 @@ if (ncol(x) < 2) {
   stop("The predictor matrix 'x' must have at least two columns.")
 }
 
+# Normalize the predictor matrix
+x_normalized <- scale(x)
+
 # Set seed for reproducibility
 set.seed(213)
 
 # Split the data into training and test sets
-train_idx <- sample(1:nrow(x), size = 0.8 * nrow(x))
-x_train <- x[train_idx, ]
+train_idx <- sample(1:nrow(x_normalized), size = 0.8 * nrow(x_normalized))
+x_train <- x_normalized[train_idx, ]
 y_train <- y[train_idx]
-x_test <- x[-train_idx, ]
+x_test <- x_normalized[-train_idx, ]
 y_test <- y[-train_idx]
 
 # Train a BART model for feature selection
@@ -243,12 +247,6 @@ print(selected_features)
 # Subset the training and test data to the selected features
 x_train_selected <- x_train[, selected_features, drop = FALSE]
 x_test_selected <- x_test[, selected_features, drop = FALSE]
-
-# Debugging: Print dimensions of x_train_selected and x_train
-cat("Dimensions of x_train_selected:\n")
-print(dim(x_train_selected))
-cat("Dimensions of x_train:\n")
-print(dim(x_train))
 
 # Predict on the training data
 train_predictions <- bart_model$prob.train.mean
@@ -300,10 +298,7 @@ print(var_importance)
 selected_covariates <- names(var_importance)[var_importance > 0.5]
 cat("Selected covariates:", selected_covariates, "\n")
 
-
 ```
-
-
 
 
 
