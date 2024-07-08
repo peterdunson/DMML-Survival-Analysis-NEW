@@ -300,9 +300,8 @@ rf_cv_model <- train(
   tuneGrid = tune_grid,
   metric = "ROC",
   importance = TRUE,
-  ntree = 50,  # Further reduce number of trees to prevent overfitting
-  nodesize = 20,  # Further increase the minimum size of terminal nodes
-  maxnodes = 30  # Ensure maxnodes is greater than nodesize
+  ntree = 100,  # Further reduce number of trees to prevent overfitting
+  nodesize = 20  # Further increase the minimum size of terminal node  
 )
 
 # Print the results of the cross-validation
