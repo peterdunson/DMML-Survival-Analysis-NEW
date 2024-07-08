@@ -369,25 +369,28 @@ y_test <- y[-train_idx]
 dtrain <- xgb.DMatrix(data = x_train, label = y_train)
 dtest <- xgb.DMatrix(data = x_test, label = y_test)
 
-# Initial parameters for xgboost with class weights
+# Calculate scale_pos_weight for class imbalance
+scale_pos_weight <- sum(y_train == 0) / sum(y_train == 1)
+
+# Initial parameters for xgboost with conservative settings
 params <- list(
   objective = "binary:logistic",
   eval_metric = "auc",
   eta = 0.1,             # Learning rate
-  max_depth = 3, #tree depth
-  subsample = 0.5,       # Subsample ratio
-  colsample_bytree = .3, # Feature subsample ratio
-  lambda = 10,            # L2 regularization
-  alpha = 0,             # L1 regularization
-  gamma = 12,            # Regularization parameter
-  scale_pos_weight = sum(y_train == 0) / sum(y_train == 1)  # Class weight
+  max_depth = 2,         # Shallow trees
+  min_child_weight = 5,  # Conservative min_child_weight
+  subsample = 0.8,       # Subsample ratio
+  colsample_bytree = 0.8, # Feature subsample ratio
+  lambda = 1,            # Mild L2 regularization
+  alpha = 1,             # Mild L1 regularization
+  scale_pos_weight = scale_pos_weight  # Class weight
 )
 
 # Perform cross-validation to find the best number of rounds
 cv <- xgb.cv(
   params = params,
   data = dtrain,
-  nrounds = 1000,
+  nrounds = 500,
   nfold = 10,
   metrics = "auc",
   stratified = TRUE,
@@ -402,8 +405,8 @@ cat("Best number of rounds:", best_nrounds, "\n")
 
 # Check CV error rate
 cv_error <- cv$evaluation_log
-train_error <- cv_error[best_nrounds, train_auc_mean]
-test_error <- cv_error[best_nrounds, test_auc_mean]
+train_error <- as.numeric(cv_error[best_nrounds, "train_auc_mean"])
+test_error <- as.numeric(cv_error[best_nrounds, "test_auc_mean"])
 cat("Train AUC:", train_error, "\n")
 cat("Test AUC:", test_error, "\n")
 
@@ -420,9 +423,9 @@ xgb.plot.importance(importance_matrix, main = "Feature Importance (Gradient Boos
 # Predict on the test data
 pred <- predict(xgb_model, newdata = x_test)
 
-# Adjust the decision threshold to improve true negatives
-threshold <- 0.7  # Example threshold, you can adjust this
-pred_class <- ifelse(pred > threshold, 1, 0)
+# Adjust the decision threshold to improve true negatives (optional threshold tuning)
+optimal_threshold <- 0.5  # You can automate this using ROC analysis or Youden's J statistic
+pred_class <- ifelse(pred > optimal_threshold, 1, 0)
 
 # Calculate AUC
 roc_obj <- roc(y_test, pred)
@@ -478,7 +481,6 @@ plot_learning_curve(train_sizes, train_scores, test_scores)
 
 cat("Train AUC:", train_error, "\n")
 cat("Test AUC:", test_error, "\n")
-
 ```
 
 
