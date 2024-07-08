@@ -1,0 +1,92 @@
+---
+title: "decision_tree"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r}
+# Load necessary libraries
+library(data.table)
+library(caret)
+library(pROC)
+library(rpart)
+library(rpart.plot)
+
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Subset the data to exclude unnecessary columns and ensure the outcome variable is included and properly named
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
+
+# Ensure valid factor levels for outcome
+RF_complete_df$outcome <- factor(make.names(RF_complete_df$outcome))
+
+# Verify levels
+levels(RF_complete_df$outcome)
+
+# Split the dataset into training and test sets
+set.seed(403)
+train_idx <- createDataPartition(RF_complete_df$outcome, p = 0.8, list = FALSE)
+train_data <- RF_complete_df[train_idx, ]
+test_data <- RF_complete_df[-train_idx, ]
+
+# Define predictor matrix and outcome variable for training data
+x_train <- train_data[, setdiff(names(train_data), "outcome"), with = FALSE]
+y_train <- train_data$outcome
+
+# Define predictor matrix and outcome variable for test data
+x_test <- test_data[, setdiff(names(test_data), "outcome"), with = FALSE]
+y_test <- as.numeric(test_data$outcome) - 1  # Convert outcome to 0 and 1
+
+# Decision tree model using caret
+set.seed(403)
+tree_model <- train(
+  outcome ~ .,
+  data = train_data,
+  method = "rpart",
+  trControl = trainControl(method = "cv", number = 10, classProbs = TRUE, summaryFunction = twoClassSummary)
+)
+
+# Predict on the test data
+tree_pred_probs <- predict(tree_model, newdata = x_test, type = "prob")[,2]
+tree_pred_class <- ifelse(tree_pred_probs > 0.5, 1, 0)
+
+# Calculate AUC
+tree_roc_obj <- roc(y_test, tree_pred_probs)
+tree_auc <- tree_roc_obj$auc
+cat("Decision Tree AUC:", tree_auc, "\n")
+
+# Plot ROC curve
+plot.roc(tree_roc_obj, main = "ROC Curve (Decision Tree)")
+
+# Calculate log-loss
+log_loss <- function(y_true, y_prob) {
+  epsilon <- 1e-15
+  y_prob <- pmax(epsilon, pmin(1 - epsilon, y_prob))
+  -mean(y_true * log(y_prob) + (1 - y_true) * log(1 - y_prob))
+}
+tree_log_loss_value <- log_loss(y_test, tree_pred_probs)
+cat("Decision Tree Log-loss:", tree_log_loss_value, "\n")
+
+# Confusion matrix with adjusted threshold
+tree_conf_matrix <- table(Predicted = tree_pred_class, Actual = y_test)
+print(tree_conf_matrix)
+
+# Plot the decision tree
+rpart.plot(tree_model$finalModel, main = "Decision Tree")
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
