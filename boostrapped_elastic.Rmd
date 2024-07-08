@@ -1,0 +1,172 @@
+---
+title: "bootstrapped_elastic"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r}
+# Install and Load Required Packages
+library(glmnet)
+library(caret)
+library(pROC)
+library(boot)
+library(data.table)
+
+# Load and Preprocess Data
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
+
+# Convert data to data.table
+dt <- as.data.table(RF_complete_df)
+
+# Exclude the 'outcome' column and prepare the predictor matrix
+if ("outcome" %in% names(dt)) {
+  predictor_names <- setdiff(names(dt), "outcome")  # Get names of predictor columns
+  x <- as.matrix(dt[, ..predictor_names])  # Exclude the outcome variable
+  y <- as.numeric(dt$outcome)  # Convert outcome to numeric
+} else {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Ensure x has at least two columns
+if (ncol(x) < 2) {
+  stop("The predictor matrix 'x' must have at least two columns.")
+}
+
+# Define Elastic Net Bootstrap Function
+elastic_net_bootstrap <- function(data, indices) {
+  dt_bootstrap <- data[indices, ]
+  x_bootstrap <- as.matrix(dt_bootstrap[, ..predictor_names])
+  y_bootstrap <- as.numeric(dt_bootstrap$outcome)
+  
+  cv_fit <- cv.glmnet(x_bootstrap, y_bootstrap, family = "binomial", alpha = 0.5)
+  best_lambda <- cv_fit$lambda.min
+  model <- glmnet(x_bootstrap, y_bootstrap, family = "binomial", alpha = 0.5, lambda = best_lambda)
+  
+  return(as.vector(coef(model)))
+}
+
+# Run Bootstrapping
+set.seed(123)
+boot_results <- boot(data = dt, statistic = elastic_net_bootstrap, R = 100)
+
+# Extract and average coefficients across bootstrap samples
+avg_coefficients <- apply(boot_results$t, 2, mean)
+
+# Calculate Confidence Intervals
+conf_intervals <- lapply(1:ncol(boot_results$t), function(i) boot.ci(boot_results, type = "perc", index = i))
+
+# Split the Data into Training and Test Sets
+set.seed(213)
+train_idx <- sample(1:nrow(x), size = 0.8 * nrow(x))
+x_train <- x[train_idx, ]
+y_train <- y[train_idx]
+x_test <- x[-train_idx, ]
+y_test <- y[-train_idx]
+
+# Train the Final Model Using the Average Coefficients
+final_model <- glmnet(x_train, y_train, family = "binomial", alpha = 0.5, lambda = best_lambda)
+
+# Predict on the Test Data
+test_predictions <- predict(final_model, newx = x_test, type = "response")
+
+# Calculate AUC
+test_roc <- roc(y_test, test_predictions)
+cat("Test AUC:", auc(test_roc), "\n")
+
+# Print Confidence Intervals for All Coefficients
+for (i in 1:length(conf_intervals)) {
+  cat("Confidence interval for coefficient", i - 1, ":\n")
+  print(conf_intervals[[i]])
+}
+
+```
+
+```{r}
+# Install and Load Required Packages
+library(glmnet)
+library(caret)
+library(pROC)
+library(boot)
+library(data.table)
+
+# Load and Preprocess Data
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
+
+# Convert data to data.table
+dt <- as.data.table(RF_complete_df)
+
+# Exclude the 'outcome' column and prepare the predictor matrix
+if ("outcome" %in% names(dt)) {
+  predictor_names <- setdiff(names(dt), "outcome")  # Get names of predictor columns
+  x <- as.matrix(dt[, ..predictor_names])  # Exclude the outcome variable
+  y <- as.numeric(dt$outcome)  # Convert outcome to numeric
+} else {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Ensure x has at least two columns
+if (ncol(x) < 2) {
+  stop("The predictor matrix 'x' must have at least two columns.")
+}
+
+# Define Elastic Net Bootstrap Function
+elastic_net_bootstrap <- function(data, indices) {
+  dt_bootstrap <- data[indices, ]
+  x_bootstrap <- as.matrix(dt_bootstrap[, ..predictor_names])
+  y_bootstrap <- as.numeric(dt_bootstrap$outcome)
+  
+  cv_fit <- cv.glmnet(x_bootstrap, y_bootstrap, family = "binomial", alpha = 0.5)
+  best_lambda <- cv_fit$lambda.min
+  model <- glmnet(x_bootstrap, y_bootstrap, family = "binomial", alpha = 0.5, lambda = best_lambda)
+  
+  return(as.vector(coef(model)))
+}
+
+# Run Bootstrapping
+set.seed(123)
+boot_results <- boot(data = dt, statistic = elastic_net_bootstrap, R = 100)
+
+# Extract and average coefficients across bootstrap samples
+avg_coefficients <- apply(boot_results$t, 2, mean)
+
+# Calculate Confidence Intervals
+conf_intervals <- lapply(1:ncol(boot_results$t), function(i) boot.ci(boot_results, type = "perc", index = i))
+
+# Split the Data into Training and Test Sets
+set.seed(213)
+train_idx <- sample(1:nrow(x), size = 0.8 * nrow(x))
+x_train <- x[train_idx, ]
+y_train <- y[train_idx]
+x_test <- x[-train_idx, ]
+y_test <- y[-train_idx]
+
+# Train the Final Model Using the Average Coefficients
+final_model <- glmnet(x_train, y_train, family = "binomial", alpha = 0.5, lambda = best_lambda)
+
+# Predict on the Test Data
+test_predictions <- predict(final_model, newx = x_test, type = "response")
+
+# Calculate AUC
+test_roc <- roc(y_test, test_predictions)
+cat("Test AUC:", auc(test_roc), "\n")
+
+# Print Confidence Intervals for All Coefficients
+for (i in 1:length(conf_intervals)) {
+  cat("Confidence interval for coefficient", i - 1, ":\n")
+  print(conf_intervals[[i]])
+}
+
+# Print Selected Features based on non-zero average coefficients
+selected_features <- predictor_names[which(avg_coefficients[-1] != 0)]
+cat("Selected Features based on Elastic Net:\n")
+print(selected_features)
+
+```
+
+
+
+
