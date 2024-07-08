@@ -15,7 +15,7 @@ library(data.table)
 ```{r}
 RF_impute_df <- fread("RF_imputation_NEW.csv")
 
-RF_complete_df = subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
+RF_complete_df = subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
 
 
 

@@ -23,7 +23,7 @@ library(data.table)
 RF_impute_df <- fread("RF_imputation_NEW.csv")
 
 # Subset the data to exclude unnecessary columns and ensure the outcome variable is included and properly named
-RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id))
 
 # Ensure the outcome variable has valid factor levels
 RF_complete_df$outcome <- as.factor(RF_complete_df$outcome)
@@ -96,7 +96,7 @@ library(data.table)
 RF_impute_df <- fread("RF_imputation_NEW.csv")
 
 # Subset the data to exclude unnecessary columns and ensure the outcome variable is included and properly named
-RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
 
 # Ensure the outcome variable has valid factor levels
 RF_complete_df$outcome <- as.factor(RF_complete_df$outcome)
@@ -180,6 +180,142 @@ auc_metric <- function(y_true, y_prob) {
 
 
 ```
+
+
+
+```{r}
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap))
+
+# Load necessary libraries
+library(BART)
+library(data.table)
+library(pROC)
+
+# Load and preprocess the data
+dt <- as.data.table(RF_complete_df)
+
+# Print the structure of the entire dataframe
+cat("Structure of the entire dataframe:\n")
+print(str(dt))
+
+# Exclude the 'outcome' column and prepare the predictor matrix
+if ("outcome" %in% names(dt)) {
+  predictor_names <- setdiff(names(dt), "outcome")  # Get names of predictor columns
+  x <- as.matrix(dt[, ..predictor_names])  # Exclude the outcome variable
+  y <- as.numeric(dt$outcome)  # Convert outcome to numeric
+} else {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Print column names after excluding 'outcome'
+cat("Column names after excluding 'outcome':\n")
+print(colnames(x))
+
+# Ensure x has at least two columns
+if (ncol(x) < 2) {
+  stop("The predictor matrix 'x' must have at least two columns.")
+}
+
+# Set seed for reproducibility
+set.seed(213)
+
+# Split the data into training and test sets
+train_idx <- sample(1:nrow(x), size = 0.8 * nrow(x))
+x_train <- x[train_idx, ]
+y_train <- y[train_idx]
+x_test <- x[-train_idx, ]
+y_test <- y[-train_idx]
+
+# Train a BART model for feature selection
+bart_model <- pbart(x.train = x_train, y.train = y_train, x.test = x_test)
+
+# Check the structure of bart_model to find the variable importance
+cat("Structure of bart_model:\n")
+print(str(bart_model))
+
+# Determine the variable inclusion proportions correctly
+var_importance <- colMeans(bart_model$varcount)
+selected_features <- names(var_importance)[which(var_importance > 0.5)]  # Arbitrary threshold, adjust as needed
+cat("Selected features based on BART:\n")
+print(selected_features)
+
+# Subset the training and test data to the selected features
+x_train_selected <- x_train[, selected_features, drop = FALSE]
+x_test_selected <- x_test[, selected_features, drop = FALSE]
+
+# Debugging: Print dimensions of x_train_selected and x_train
+cat("Dimensions of x_train_selected:\n")
+print(dim(x_train_selected))
+cat("Dimensions of x_train:\n")
+print(dim(x_train))
+
+# Predict on the training data
+train_predictions <- bart_model$prob.train.mean
+
+# Ensure the predictions and labels are aligned
+if (length(train_predictions) != length(y_train)) {
+  stop("Length of training predictions does not match length of y_train")
+}
+
+# Function to calculate log-loss
+log_loss <- function(y_true, y_pred) {
+  epsilon <- 1e-15
+  y_pred <- pmin(pmax(y_pred, epsilon), 1 - epsilon)
+  -mean(y_true * log(y_pred) + (1 - y_true) * log(1 - y_pred))
+}
+
+# Calculate log-loss and AUC on the training data
+train_log_loss <- log_loss(y_train, train_predictions)
+cat("Train log-loss:", train_log_loss, "\n")
+train_roc <- roc(y_train, train_predictions)
+train_auc <- train_roc$auc
+cat("Train AUC:", train_auc, "\n")
+
+# Predict on the test data
+test_predictions <- bart_model$prob.test.mean
+
+# Ensure the predictions and labels are aligned
+if (length(test_predictions) != length(y_test)) {
+  stop("Length of test predictions does not match length of y_test")
+}
+
+# Calculate log-loss and AUC on the test data
+test_log_loss <- log_loss(y_test, test_predictions)
+cat("Test log-loss:", test_log_loss, "\n")
+test_roc <- roc(y_test, test_predictions)
+test_auc <- test_roc$auc
+cat("Test AUC:", test_auc, "\n")
+
+# Plot ROC curve for training and test data
+plot(train_roc, main = "ROC Curve (Training Data)")
+plot(test_roc, add = TRUE, col = "red")
+legend("bottomright", legend = c("Train", "Test"), col = c("black", "red"), lty = 1)
+
+# Print variable importance
+cat("Variable Importance:\n")
+print(var_importance)
+
+# Identify the selected covariates (based on importance threshold)
+selected_covariates <- names(var_importance)[var_importance > 0.5]
+cat("Selected covariates:", selected_covariates, "\n")
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
