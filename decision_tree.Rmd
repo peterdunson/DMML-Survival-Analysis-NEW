@@ -79,9 +79,6 @@ rpart.plot(tree_model$finalModel, main = "Decision Tree")
 ```
 
 
-```{r}
-
-```
 
 
 
