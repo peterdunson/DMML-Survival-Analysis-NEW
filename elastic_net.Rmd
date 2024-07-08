@@ -54,6 +54,8 @@ library(glmnet)
 library(data.table)
 library(pROC)
 
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
 # Convert data.frame to data.table
 dt <- as.data.table(RF_complete_df)
 
