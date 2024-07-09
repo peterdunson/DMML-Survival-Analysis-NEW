@@ -93,10 +93,9 @@ cat("Test AUC:", test_auc_value, "\n")
 
 ```
 
-
+computationally plausable: 
 ```{r}
 # Install and Load Required Packages
-install.packages(c("rstanarm", "loo", "projpred", "pROC", "data.table", "caret"))
 library(rstanarm)
 library(loo)
 library(projpred)
@@ -104,7 +103,7 @@ library(data.table)
 library(caret)
 library(pROC)
 
-# Load and Preprocess Data
+# Load Your Data
 RF_impute_df <- fread("RF_imputation_NEW.csv")
 RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
 
@@ -139,13 +138,110 @@ train_data$outcome <- y_train
 
 # Fit Bayesian Logistic Regression Model with Horseshoe Prior
 hs_prior <- hs()
-fit_hs <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = hs_prior, chains = 4, iter = 2000, seed = 213)
+fit_hs <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = hs_prior, chains = 2, iter = 1000, seed = 213, cores = 2)
 
 # Summarize the model
 print(summary(fit_hs))
 
-# Variable Selection Using projpred
-cv_varsel <- cv_varsel(fit_hs, method = "forward")
+# Variable Selection Using projpred with k-fold cross-validation
+k_folds <- 10
+cv_varsel <- cv_varsel(fit_hs, method = "forward", K = k_folds, refit_prj = FALSE)
+print(cv_varsel)
+
+# Perform Projection Predictive Variable Selection
+varsel_proj <- project(cv_varsel, nv = 10)
+print(varsel_proj)
+
+# Get the selected features
+selected_vars <- suggest_size(cv_varsel, stat = "elpd")
+print(selected_vars)
+
+# Predict on the Train Data
+train_preds <- posterior_predict(fit_hs, newdata = train_data, draws = 1000)
+train_preds_prob <- apply(train_preds, 2, mean)
+
+# Calculate Train AUC
+train_roc_curve <- roc(train_data$outcome, train_preds_prob)
+train_auc_value <- auc(train_roc_curve)
+cat("Train AUC:", train_auc_value, "\n")
+
+# Predict on the Test Data
+test_data <- data.table(x_test)
+test_data$outcome <- y_test
+
+# Make predictions on the test data
+test_preds <- posterior_predict(fit_hs, newdata = test_data, draws = 1000)
+test_preds_prob <- apply(test_preds, 2, mean)
+
+# Calculate Test AUC
+test_roc_curve <- roc(test_data$outcome, test_preds_prob)
+test_auc_value <- auc(test_roc_curve)
+cat("Test AUC:", test_auc_value, "\n")
+
+
+```
+
+
+much faster code?
+```{r}
+# Install and Load Required Packages
+library(rstanarm)
+library(loo)
+library(projpred)
+library(data.table)
+library(caret)
+library(pROC)
+library(parallel)
+
+# Load Your Data
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
+
+# Convert data to data.table
+dt <- as.data.table(RF_complete_df)
+
+# Exclude the 'outcome' column and prepare the predictor matrix
+if ("outcome" %in% names(dt)) {
+  predictor_names <- setdiff(names(dt), "outcome")  # Get names of predictor columns
+  x <- as.matrix(dt[, ..predictor_names])  # Exclude the outcome variable
+  y <- as.numeric(dt$outcome)  # Convert outcome to numeric
+} else {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Ensure x has at least two columns
+if (ncol(x) < 2) {
+  stop("The predictor matrix 'x' must have at least two columns.")
+}
+
+# Use a smaller sample for initial testing
+sample_size <- min(100, nrow(x))  # Use 100 samples or the full data if less than 100
+set.seed(213)
+sample_idx <- sample(1:nrow(x), size = sample_size)
+x_sample <- x[sample_idx, ]
+y_sample <- y[sample_idx]
+
+# Split the sample data into Training and Test Sets
+train_idx <- sample(1:nrow(x_sample), size = 0.8 * nrow(x_sample))
+x_train <- x_sample[train_idx, ]
+y_train <- y_sample[train_idx]
+x_test <- x_sample[-train_idx, ]
+y_test <- y_sample[-train_idx]
+
+# Combine x_train and y_train into a dataframe for rstanarm
+train_data <- data.table(x_train)
+train_data$outcome <- y_train
+
+# Fit Bayesian Logistic Regression Model with Horseshoe Prior
+hs_prior <- hs()
+fit_hs <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = hs_prior, chains = 2, iter = 1000, seed = 213, cores = 2, thin = 2)
+
+# Summarize the model
+print(summary(fit_hs))
+
+# Variable Selection Using projpred with 5-fold CV and no refit_prj
+k_folds <- 5
+cv_varsel <- cv_varsel(fit_hs, method = "forward", K = k_folds, refit_prj = FALSE, ncores = 2)
 print(cv_varsel)
 
 # Perform Projection Predictive Variable Selection
@@ -179,6 +275,5 @@ test_auc_value <- auc(test_roc_curve)
 cat("Test AUC:", test_auc_value, "\n")
 
 ```
-
 
 
