@@ -1,0 +1,52 @@
+---
+title: "group_lasso"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+# Install and load necessary package
+install.packages("grpreg")
+library(grpreg)
+
+# Load Your Data
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id))
+RF_complete_df
+
+# Convert data to data.table
+dt <- as.data.table(RF_complete_df)
+
+# Ensure the 'outcome' column is present
+if (!"outcome" %in% names(dt)) {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Normalize the predictors
+predictor_names <- setdiff(names(dt), "outcome")  # Get names of predictor columns
+dt[, (predictor_names) := lapply(.SD, scale), .SDcols = predictor_names]
+
+# Define groups
+groups <- list(
+  Demographics = c("gendera"),
+  Comorbidities = c("hypertensive", "atrialfibrillation", "CHD_with_no_MI", "diabetes", "deficiencyanemias", "depression", "Hyperlipemia", "Renal_failure", "COPD"),
+  Vital_Signs = c("heartrate", "Systolic_blood_pressure", "Diastolic_blood_pressure", "Respiratory_rate", "Urine_output1", "temperature", "SP_O2"),
+  Lab_Values = c("hematocrit", "RBC", "MCH", "MCHC", "MCV", "RDW", "Leucocyte", "Platelets", "Neutrophils", "Basophils", "Lymphocyte", "PT", "INR", "NT_proBNP", "Creatine_kinase", "Creatinine", "Ureanitrogen", "glucose", "Blood_potassium", "Blood_sodium", "Blood_calcium", "Chloride", "Anion_gap", "Magnesium", "PH", "Bicarbonate", "Lactic_acid", "PCO2", "EF")
+)
+
+# Prepare data for grpreg
+x <- as.matrix(dt[, ..predictor_names])
+y <- as.numeric(dt$outcome)
+
+# Define group index
+group_index <- unlist(lapply(seq_along(groups), function(i) rep(i, length(groups[[i]]))))
+
+# Run group lasso
+fit_group_lasso <- grpreg(x, y, group = group_index, family = "binomial")
+
+# Summarize the model
+summary(fit_group_lasso)
+
+```
+

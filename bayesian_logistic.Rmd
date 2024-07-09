@@ -279,7 +279,7 @@ cat("Test AUC:", test_auc_value, "\n")
 ```
 
 
-super quick?
+error test
 ```{r}
 # Install and Load Required Packages
 library(rstanarm)
@@ -303,18 +303,18 @@ if (!"outcome" %in% names(dt)) {
 }
 
 # Normalize the predictors
-predictor_names <- setdiff(names(dt), "outcome")  # Get names of predictor columns
+predictor_names <- setdiff(names(dt), "outcome")
 dt[, (predictor_names) := lapply(.SD, scale), .SDcols = predictor_names]
 
-# Use a very small sample for initial testing
-sample_size <- min(20, nrow(dt))  # Use 20 samples or the full data if less than 20
+# Identify and remove constant columns
+constant_cols <- sapply(dt, function(x) length(unique(x)) == 1)
+dt <- dt[, !constant_cols, with = FALSE]
+
+# Use a smaller sample for initial testing
+sample_size <- min(100, nrow(dt))  # Use 100 samples or the full data if less than 100
 set.seed(213)
 sample_idx <- sample(1:nrow(dt), size = sample_size)
 sample_data <- dt[sample_idx]
-
-# Identify and remove constant columns
-constant_cols <- sapply(sample_data, function(x) length(unique(x)) == 1)
-sample_data <- sample_data[, !constant_cols, with = FALSE]
 
 # Split the sample data into Training and Test Sets
 train_idx <- sample(1:nrow(sample_data), size = 0.8 * nrow(sample_data))
@@ -323,24 +323,17 @@ test_data <- sample_data[-train_idx, ]
 
 # Fit Bayesian Logistic Regression Model with Normal Prior
 normal_prior <- normal(location = 0, scale = 1)
-fit_normal <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = normal_prior, chains = 1, iter = 100, seed = 213, cores = 8, thin = 1)
+fit_normal <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = normal_prior, chains = 1, iter = 400, seed = 213, cores = 8, thin = 1)
 
 # Summarize the model
 print(summary(fit_normal))
 
-# Create necessary directories to avoid file access issues
-output_dir <- "/Users/peterdunson/Documents/DMML-Survival-Analysis-NEW/.Rproj.user/shared/notebooks"
-if (!dir.exists(output_dir)) {
-  dir.create(output_dir, recursive = TRUE)
-}
-
-# Variable Selection Using projpred with 2-fold CV and no refit_prj
-k_folds <- 2
-cv_varsel <- cv_varsel(fit_normal, method = "forward", K = k_folds, refit_prj = FALSE, ncores = 2)
+# Perform Variable Selection with 2-fold CV and no refit_prj
+cv_varsel <- cv_varsel(fit_normal, method = "forward", K = 2, refit_prj = FALSE, ncores = 8)
 print(cv_varsel)
 
 # Perform Projection Predictive Variable Selection
-varsel_proj <- project(cv_varsel, nv = 5)
+varsel_proj <- project(cv_varsel, nv = 10)
 print(varsel_proj)
 
 # Get the selected features
@@ -348,7 +341,7 @@ selected_vars <- suggest_size(cv_varsel, stat = "elpd")
 print(selected_vars)
 
 # Predict on the Train Data
-train_preds <- posterior_predict(fit_normal, newdata = train_data, draws = 100)
+train_preds <- posterior_predict(fit_normal, newdata = train_data, draws = 1000)
 train_preds_prob <- apply(train_preds, 2, mean)
 
 # Calculate Train AUC
@@ -357,7 +350,7 @@ train_auc_value <- auc(train_roc_curve)
 cat("Train AUC:", train_auc_value, "\n")
 
 # Predict on the Test Data
-test_preds <- posterior_predict(fit_normal, newdata = test_data, draws = 100)
+test_preds <- posterior_predict(fit_normal, newdata = test_data, draws = 1000)
 test_preds_prob <- apply(test_preds, 2, mean)
 
 # Calculate Test AUC
