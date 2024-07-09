@@ -74,6 +74,127 @@ cat("Log-loss:", log_loss_value, "\n")
 ```
 
 
+```{r}
+# Load necessary libraries
+library(xgboost)
+library(data.table)
+library(caret)
+library(pROC)
+
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Subset the data to exclude unnecessary columns and ensure the outcome variable is included and properly named
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
+
+# Ensure the outcome variable has valid factor levels
+RF_complete_df$outcome <- factor(RF_complete_df$outcome, levels = unique(RF_complete_df$outcome))
+
+# Prepare the predictor matrix and outcome variable
+x <- as.matrix(RF_complete_df[, setdiff(names(RF_complete_df), "outcome"), with = FALSE])
+y <- as.numeric(RF_complete_df$outcome) - 1  # Convert outcome to 0 and 1
+
+# Split the dataset into training and test sets
+set.seed(403)
+train_idx <- createDataPartition(y, p = 0.8, list = FALSE)
+x_train <- x[train_idx, ]
+y_train <- y[train_idx]
+x_test <- x[-train_idx, ]
+y_test <- y[-train_idx]
+
+# Create xgboost DMatrix
+dtrain <- xgb.DMatrix(data = x_train, label = y_train)
+dtest <- xgb.DMatrix(data = x_test, label = y_test)
+
+# Set parameters for xgboost with increased regularization and reduced tree depth
+params <- list(
+  objective = "binary:logistic",
+  eval_metric = "auc",
+  max_depth = 2,          # Further reduce tree depth
+  eta = 0.1,             # Further reduce learning rate
+  subsample = 0.5,        # Further reduce subsample ratio
+  colsample_bytree = 0.5, # Further reduce column subsample ratio
+  lambda = 1,            # Further increase L2 regularization
+  alpha = 1,             # Further increase L1 regularization
+  gamma = 1,              # Add gamma for controlling tree complexity
+  min_child_weight = 10,  # Further increase min_child_weight
+  nthread = 2
+)
+
+# Perform cross-validation to find the best number of rounds
+cv <- xgb.cv(params, dtrain, nrounds = 1000, nfold = 10, metrics = "auc", stratified = TRUE, early_stopping_rounds = 10, verbose = 1)
+
+# Extract the best number of rounds
+best_nrounds <- cv$best_iteration
+cat("Best number of rounds:", best_nrounds, "\n")
+
+# Train the final model using the best number of rounds
+xgb_model <- xgb.train(params, dtrain, nrounds = best_nrounds, watchlist = list(eval = dtest, train = dtrain), verbose = 1)
+
+# Get feature importance
+importance_matrix <- xgb.importance(feature_names = colnames(x_train), model = xgb_model)
+print(importance_matrix)
+
+# Plot feature importance
+xgb.plot.importance(importance_matrix, main = "Feature Importance (Gradient Boosting)")
+
+# Predict on the test data
+pred <- predict(xgb_model, newdata = x_test)
+
+# Calculate AUC
+roc_obj <- roc(y_test, pred)
+auc <- roc_obj$auc
+cat("AUC:", auc, "\n")
+
+# Plot ROC curve
+plot.roc(roc_obj, main = "ROC Curve (Test Data)")
+
+# Calculate log-loss
+log_loss <- function(y_true, y_prob) {
+  epsilon <- 1e-15
+  y_prob <- pmax(epsilon, pmin(1 - epsilon, y_prob))
+  -mean(y_true * log(y_prob) + (1 - y_true) * log(1 - y_prob))
+}
+log_loss_value <- log_loss(y_test, pred)
+cat("Log-loss:", log_loss_value, "\n")
+
+# Confusion matrix
+pred_class <- ifelse(pred > 0.5, 1, 0)
+conf_matrix <- table(Predicted = pred_class, Actual = y_test)
+print(conf_matrix)
+
+# Function to plot learning curves
+plot_learning_curve <- function(train_sizes, train_scores, test_scores) {
+  plot(train_sizes, train_scores, type = "o", col = "blue", ylim = range(c(train_scores, test_scores)), xlab = "Training Size", ylab = "Score", main = "Learning Curves")
+  lines(train_sizes, test_scores, type = "o", col = "red")
+  legend("bottomright", legend = c("Train", "Validation"), col = c("blue", "red"), lty = 1)
+}
+
+# Generate learning curves
+train_sizes <- seq(0.1, 1.0, by = 0.1)
+train_scores <- numeric(length(train_sizes))
+test_scores <- numeric(length(train_sizes))
+
+for (i in seq_along(train_sizes)) {
+  train_size <- train_sizes[i]
+  train_idx <- createDataPartition(y_train, p = train_size, list = FALSE)
+  x_train_part <- x_train[train_idx, ]
+  y_train_part <- y_train[train_idx]
+  dtrain_part <- xgb.DMatrix(data = x_train_part, label = y_train_part)
+  
+  model <- xgb.train(params, dtrain_part, nrounds = best_nrounds, verbose = 0)
+  train_pred <- predict(model, newdata = x_train_part)
+  test_pred <- predict(model, newdata = x_test)
+  
+  # Calculate AUC for training and test sets
+  train_scores[i] <- roc(y_train_part, train_pred)$auc
+  test_scores[i] <- roc(y_test, test_pred)$auc
+}
+
+# Plot learning curves
+plot_learning_curve(train_sizes, train_scores, test_scores)
+
+```
 
 ```{r}
 # Load necessary libraries
@@ -248,28 +369,25 @@ y_test <- y[-train_idx]
 dtrain <- xgb.DMatrix(data = x_train, label = y_train)
 dtest <- xgb.DMatrix(data = x_test, label = y_test)
 
-# Calculate scale_pos_weight for class imbalance
-scale_pos_weight <- sum(y_train == 0) / sum(y_train == 1)
-
-# Initial parameters for xgboost with conservative settings
+# Initial parameters for xgboost with class weights
 params <- list(
   objective = "binary:logistic",
   eval_metric = "auc",
   eta = 0.1,             # Learning rate
-  max_depth = 2,         # Shallow trees
-  min_child_weight = 5,  # Conservative min_child_weight
-  subsample = 0.8,       # Subsample ratio
-  colsample_bytree = 0.8, # Feature subsample ratio
-  lambda = 1,            # Mild L2 regularization
-  alpha = 1,             # Mild L1 regularization
-  scale_pos_weight = scale_pos_weight  # Class weight
+  max_depth = 3, #tree depth
+  subsample = 0.5,       # Subsample ratio
+  colsample_bytree = .3, # Feature subsample ratio
+  lambda = 10,            # L2 regularization
+  alpha = 0,             # L1 regularization
+  gamma = 12,            # Regularization parameter
+  scale_pos_weight = sum(y_train == 0) / sum(y_train == 1)  # Class weight
 )
 
 # Perform cross-validation to find the best number of rounds
 cv <- xgb.cv(
   params = params,
   data = dtrain,
-  nrounds = 500,
+  nrounds = 1000,
   nfold = 10,
   metrics = "auc",
   stratified = TRUE,
@@ -284,8 +402,8 @@ cat("Best number of rounds:", best_nrounds, "\n")
 
 # Check CV error rate
 cv_error <- cv$evaluation_log
-train_error <- as.numeric(cv_error[best_nrounds, "train_auc_mean"])
-test_error <- as.numeric(cv_error[best_nrounds, "test_auc_mean"])
+train_error <- cv_error[best_nrounds, train_auc_mean]
+test_error <- cv_error[best_nrounds, test_auc_mean]
 cat("Train AUC:", train_error, "\n")
 cat("Test AUC:", test_error, "\n")
 
@@ -302,9 +420,9 @@ xgb.plot.importance(importance_matrix, main = "Feature Importance (Gradient Boos
 # Predict on the test data
 pred <- predict(xgb_model, newdata = x_test)
 
-# Adjust the decision threshold to improve true negatives (optional threshold tuning)
-optimal_threshold <- 0.5  # You can automate this using ROC analysis or Youden's J statistic
-pred_class <- ifelse(pred > optimal_threshold, 1, 0)
+# Adjust the decision threshold to improve true negatives
+threshold <- 0.7  # Example threshold, you can adjust this
+pred_class <- ifelse(pred > threshold, 1, 0)
 
 # Calculate AUC
 roc_obj <- roc(y_test, pred)
@@ -360,119 +478,8 @@ plot_learning_curve(train_sizes, train_scores, test_scores)
 
 cat("Train AUC:", train_error, "\n")
 cat("Test AUC:", test_error, "\n")
+
 ```
-
-```{r}
-# Load necessary libraries
-library(xgboost)
-library(data.table)
-library(caret)
-library(pROC)
-
-# Load the dataset
-RF_impute_df <- fread("RF_imputation_NEW.csv")
-
-# Subset the data to exclude unnecessary columns and ensure the outcome variable is included and properly named
-RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS))
-
-# Ensure the outcome variable has valid factor levels
-RF_complete_df$outcome <- factor(RF_complete_df$outcome, levels = unique(RF_complete_df$outcome))
-
-# Prepare the predictor matrix and outcome variable
-x <- as.matrix(RF_complete_df[, setdiff(names(RF_complete_df), "outcome"), with = FALSE])
-y <- as.numeric(RF_complete_df$outcome) - 1  # Convert outcome to 0 and 1
-
-# Split the dataset into training and test sets
-set.seed(403)
-train_idx <- createDataPartition(y, p = 0.8, list = FALSE)
-x_train <- x[train_idx, ]
-y_train <- y[train_idx]
-x_test <- x[-train_idx, ]
-y_test <- y[-train_idx]
-
-# Create xgboost DMatrix
-dtrain <- xgb.DMatrix(data = x_train, label = y_train)
-dtest <- xgb.DMatrix(data = x_test, label = y_test)
-
-# Initial parameters for a very basic xgboost model
-params <- list(
-  objective = "binary:logistic",
-  eval_metric = "auc",
-  eta = 0.1,             # Learning rate
-  max_depth = 2,         # Very shallow trees
-  subsample = 1,         # No subsampling
-  colsample_bytree = 1   # No feature subsampling
-)
-
-# Perform cross-validation to find the best number of rounds
-cv <- xgb.cv(
-  params = params,
-  data = dtrain,
-  nrounds = 100,
-  nfold = 5,
-  metrics = "auc",
-  stratified = TRUE,
-  early_stopping_rounds = 10,
-  maximize = TRUE,
-  verbose = 1
-)
-
-# Extract the best number of rounds
-best_nrounds <- cv$best_iteration
-cat("Best number of rounds:", best_nrounds, "\n")
-
-# Check CV error rate
-cv_error <- cv$evaluation_log
-train_error <- as.numeric(cv_error[best_nrounds, "train_auc_mean"])
-test_error <- as.numeric(cv_error[best_nrounds, "test_auc_mean"])
-cat("Train AUC:", train_error, "\n")
-cat("Test AUC:", test_error, "\n")
-
-# Train the final model using the best number of rounds
-xgb_model <- xgb.train(params, dtrain, nrounds = best_nrounds, watchlist = list(eval = dtest, train = dtrain), verbose = 1)
-
-# Get feature importance
-importance_matrix <- xgb.importance(feature_names = colnames(x_train), model = xgb_model)
-print(importance_matrix)
-
-# Plot feature importance
-xgb.plot.importance(importance_matrix, main = "Feature Importance (Baseline Model)")
-
-# Predict on the test data
-pred <- predict(xgb_model, newdata = x_test)
-
-# Adjust the decision threshold to improve true negatives (optional threshold tuning)
-optimal_threshold <- 0.5  # You can automate this using ROC analysis or Youden's J statistic
-pred_class <- ifelse(pred > optimal_threshold, 1, 0)
-
-# Calculate AUC
-roc_obj <- roc(y_test, pred)
-auc <- roc_obj$auc
-cat("AUC:", auc, "\n")
-
-# Plot ROC curve
-plot.roc(roc_obj, main = "ROC Curve (Test Data)")
-
-# Calculate log-loss
-log_loss <- function(y_true, y_prob) {
-  epsilon <- 1e-15
-  y_prob <- pmax(epsilon, pmin(1 - epsilon, y_prob))
-  -mean(y_true * log(y_prob) + (1 - y_true) * log(1 - y_prob))
-}
-log_loss_value <- log_loss(y_test, pred)
-cat("Log-loss:", log_loss_value, "\n")
-
-# Confusion matrix with adjusted threshold
-conf_matrix <- table(Predicted = pred_class, Actual = y_test)
-print(conf_matrix)
-```
-
-
-
-
-
-
-
 
 
 
