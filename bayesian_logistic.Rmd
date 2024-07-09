@@ -222,20 +222,19 @@ if (!"outcome" %in% names(dt)) {
 predictor_names <- setdiff(names(dt), "outcome")  # Get names of predictor columns
 dt[, (predictor_names) := lapply(.SD, scale), .SDcols = predictor_names]
 
-# Use a smaller sample for initial testing
-sample_size <- min(100, nrow(dt))  # Use 100 samples or the full data if less than 100
-set.seed(213)
-sample_idx <- sample(1:nrow(dt), size = sample_size)
-sample_data <- dt[sample_idx]
+# Identify and remove constant columns
+constant_cols <- sapply(dt, function(x) length(unique(x)) == 1)
+dt <- dt[, !constant_cols, with = FALSE]
 
-# Split the sample data into Training and Test Sets
-train_idx <- sample(1:nrow(sample_data), size = 0.8 * nrow(sample_data))
-train_data <- sample_data[train_idx, ]
-test_data <- sample_data[-train_idx, ]
+# Split the data into Training and Test Sets
+set.seed(213)
+train_idx <- sample(1:nrow(dt), size = 0.8 * nrow(dt))
+train_data <- dt[train_idx, ]
+test_data <- dt[-train_idx, ]
 
 # Fit Bayesian Logistic Regression Model with Normal Prior
 normal_prior <- normal(location = 0, scale = 1)
-fit_normal <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = normal_prior, chains = 2, iter = 1000, seed = 213, cores = 8, thin = 2)
+fit_normal <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = normal_prior, chains = 4, iter = 2000, seed = 213, cores = 8, thin = 2)
 
 # Summarize the model
 print(summary(fit_normal))
@@ -324,7 +323,7 @@ test_data <- sample_data[-train_idx, ]
 
 # Fit Bayesian Logistic Regression Model with Normal Prior
 normal_prior <- normal(location = 0, scale = 1)
-fit_normal <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = normal_prior, chains = 1, iter = 500, seed = 213, cores = 8, thin = 1)
+fit_normal <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = normal_prior, chains = 1, iter = 100, seed = 213, cores = 8, thin = 1)
 
 # Summarize the model
 print(summary(fit_normal))
