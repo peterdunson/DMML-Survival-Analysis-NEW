@@ -292,7 +292,7 @@ library(parallel)
 
 # Load Your Data
 RF_impute_df <- fread("RF_imputation_NEW.csv")
-RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id))
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id, CHD_with_no_MI, COPD))
 
 # Convert data to data.table
 dt <- as.data.table(RF_complete_df)
@@ -310,8 +310,8 @@ dt[, (predictor_names) := lapply(.SD, scale), .SDcols = predictor_names]
 constant_cols <- sapply(dt, function(x) length(unique(x)) == 1)
 dt <- dt[, !constant_cols, with = FALSE]
 
-# Use a smaller sample for initial testing
-sample_size <- min(100, nrow(dt))  # Use 100 samples or the full data if less than 100
+# Use a very small sample for testing
+sample_size <- 20  # Very small sample size for quick testing
 set.seed(213)
 sample_idx <- sample(1:nrow(dt), size = sample_size)
 sample_data <- dt[sample_idx]
@@ -323,17 +323,17 @@ test_data <- sample_data[-train_idx, ]
 
 # Fit Bayesian Logistic Regression Model with Normal Prior
 normal_prior <- normal(location = 0, scale = 1)
-fit_normal <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = normal_prior, chains = 1, iter = 400, seed = 213, cores = 8, thin = 1)
+fit_normal <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = normal_prior, chains = 1, iter = 10, seed = 213, cores = 2, thin = 1)
 
 # Summarize the model
 print(summary(fit_normal))
 
 # Perform Variable Selection with 2-fold CV and no refit_prj
-cv_varsel <- cv_varsel(fit_normal, method = "forward", K = 2, refit_prj = FALSE, ncores = 8)
+cv_varsel <- cv_varsel(fit_normal, method = "forward", K = 2, refit_prj = FALSE, ncores = 2)
 print(cv_varsel)
 
 # Perform Projection Predictive Variable Selection
-varsel_proj <- project(cv_varsel, nv = 10)
+varsel_proj <- project(cv_varsel, nv = 5)
 print(varsel_proj)
 
 # Get the selected features
@@ -341,7 +341,7 @@ selected_vars <- suggest_size(cv_varsel, stat = "elpd")
 print(selected_vars)
 
 # Predict on the Train Data
-train_preds <- posterior_predict(fit_normal, newdata = train_data, draws = 1000)
+train_preds <- posterior_predict(fit_normal, newdata = train_data, draws = 10)
 train_preds_prob <- apply(train_preds, 2, mean)
 
 # Calculate Train AUC
@@ -350,7 +350,7 @@ train_auc_value <- auc(train_roc_curve)
 cat("Train AUC:", train_auc_value, "\n")
 
 # Predict on the Test Data
-test_preds <- posterior_predict(fit_normal, newdata = test_data, draws = 1000)
+test_preds <- posterior_predict(fit_normal, newdata = test_data, draws = 10)
 test_preds_prob <- apply(test_preds, 2, mean)
 
 # Calculate Test AUC
