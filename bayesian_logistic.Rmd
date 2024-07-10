@@ -278,10 +278,14 @@ cat("Test AUC:", test_auc_value, "\n")
 
 ```
 
+```{r}
+detectCores()
+```
+
 
 full! post error test
 ```{r}
-# Install and Load Required Packages
+# Load Required Packages
 library(rstanarm)
 library(loo)
 library(projpred)
@@ -292,7 +296,7 @@ library(parallel)
 
 # Load Your Data
 RF_impute_df <- fread("RF_imputation_NEW.csv")
-RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id))
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id, COPD, CHD_with_no_MI))
 
 # Convert data to data.table
 dt <- as.data.table(RF_complete_df)
@@ -302,29 +306,30 @@ if (!"outcome" %in% names(dt)) {
   stop("The 'outcome' column does not exist in the dataframe.")
 }
 
-# Normalize the predictors
+# Normalize the predictors using parallel processing
 predictor_names <- setdiff(names(dt), "outcome")
-dt[, (predictor_names) := lapply(.SD, scale), .SDcols = predictor_names]
+dt[, (predictor_names) := mclapply(.SD, scale, mc.cores = 8), .SDcols = predictor_names]
 
 # Identify and remove constant columns
 constant_cols <- sapply(dt, function(x) length(unique(x)) == 1)
 dt <- dt[, !constant_cols, with = FALSE]
 
-# Split the data into Training and Test Sets
+# Split the data into Training and Validation Sets
 set.seed(213)
-train_idx <- sample(1:nrow(dt), size = 0.8 * nrow(dt))
-train_data <- dt[train_idx, ]
-test_data <- dt[-train_idx, ]
+train_idx <- sample(1:nrow(dt), size = 0.7 * nrow(dt))
+training_rf <- dt[train_idx, ]
+valid_rf <- dt[-train_idx, ]
 
-# Fit Bayesian Logistic Regression Model with Normal Prior
+# Fit Bayesian Logistic Regression Model with Normal Prior using optimization (Laplace approximation)
 normal_prior <- normal(location = 0, scale = 1)
-fit_normal <- stan_glm(outcome ~ ., data = train_data, family = binomial(link = "logit"), prior = normal_prior, chains = 2, iter = 1000, seed = 213, cores = 8, thin = 2)
+fit_normal <- stan_glm(outcome ~ ., data = training_rf, family = binomial(link = "logit"), 
+                       prior = normal_prior, algorithm = "optimizing", seed = 213)
 
 # Summarize the model
 print(summary(fit_normal))
 
-# Perform Variable Selection with 5-fold CV and no refit_prj
-cv_varsel <- cv_varsel(fit_normal, method = "forward", K = 5, refit_prj = FALSE, ncores = 8)
+# Perform Variable Selection with 3-fold CV and no refit_prj
+cv_varsel <- cv_varsel(fit_normal, method = "forward", K = 3, refit_prj = FALSE, ncores = 8)
 print(cv_varsel)
 
 # Perform Projection Predictive Variable Selection
@@ -336,24 +341,25 @@ selected_vars <- suggest_size(cv_varsel, stat = "elpd")
 print(selected_vars)
 
 # Predict on the Train Data
-train_preds <- posterior_predict(fit_normal, newdata = train_data, draws = 1000)
-train_preds_prob <- apply(train_preds, 2, mean)
+train_preds <- posterior_predict(fit_normal, newdata = training_rf, draws = 100)
+train_preds_prob <- rowMeans(train_preds)
 
 # Calculate Train AUC
-train_roc_curve <- roc(train_data$outcome, train_preds_prob)
+train_roc_curve <- roc(training_rf$outcome, train_preds_prob)
 train_auc_value <- auc(train_roc_curve)
 cat("Train AUC:", train_auc_value, "\n")
 
 # Predict on the Test Data
-test_preds <- posterior_predict(fit_normal, newdata = test_data, draws = 1000)
-test_preds_prob <- apply(test_preds, 2, mean)
+test_preds <- posterior_predict(fit_normal, newdata = valid_rf, draws = 100)
+test_preds_prob <- rowMeans(test_preds)
 
 # Calculate Test AUC
-test_roc_curve <- roc(test_data$outcome, test_preds_prob)
+test_roc_curve <- roc(valid_rf$outcome, test_preds_prob)
 test_auc_value <- auc(test_roc_curve)
 cat("Test AUC:", test_auc_value, "\n")
 
 
 ```
+
 
 
