@@ -16,7 +16,7 @@ library(data.table)
 
 # Load and Preprocess Data
 RF_impute_df <- fread("RF_imputation_NEW.csv")
-RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id))
 
 # Convert data to data.table
 dt <- as.data.table(RF_complete_df)
@@ -81,62 +81,6 @@ for (i in 1:length(conf_intervals)) {
   cat("Confidence interval for coefficient", i - 1, ":\n")
   print(conf_intervals[[i]])
 }
-
-```
-
-bayesian methods
-```{r}
-# Install and Load Required Packages
-# Install rstanarm if not already installed
-
-library(rstanarm)
-library(data.table)
-
-# Load and Preprocess Data
-RF_impute_df <- fread("RF_imputation_NEW.csv")
-RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
-
-# Convert data to data.table
-dt <- as.data.table(RF_complete_df)
-
-# Exclude the 'outcome' column and prepare the predictor matrix
-if ("outcome" %in% names(dt)) {
-  predictor_names <- setdiff(names(dt), "outcome")  # Get names of predictor columns
-  x <- as.matrix(dt[, ..predictor_names])  # Exclude the outcome variable
-  y <- as.numeric(dt$outcome)  # Convert outcome to numeric
-} else {
-  stop("The 'outcome' column does not exist in the dataframe.")
-}
-
-# Ensure x has at least two columns
-if (ncol(x) < 2) {
-  stop("The predictor matrix 'x' must have at least two columns.")
-}
-
-# Combine x and y into a data frame for rstanarm
-data <- data.frame(outcome = y, x)
-
-# Fit Bayesian Logistic Regression Model with Shrinkage Prior
-set.seed(123)
-bayesian_model <- stan_glm(outcome ~ ., data = data, family = binomial(link = "logit"),
-                           prior = hs(global_scale = 0.5), # horseshoe prior
-                           prior_intercept = normal(0, 10),
-                           chains = 4, iter = 2000, seed = 123)
-
-# Summarize Posterior Distributions
-posterior_summary <- summary(bayesian_model)
-print(posterior_summary)
-
-# Extract posterior samples
-posterior_samples <- as.data.frame(bayesian_model)
-
-# Print selected features based on non-zero posterior mean
-selected_features <- predictor_names[which(posterior_summary$coefficients[-1, "Mean"] != 0)]
-cat("Selected Features based on Bayesian Logistic Regression:\n")
-print(selected_features)
-
-# Plot the posterior distributions of the coefficients
-plot(bayesian_model, prob = 0.95)
 
 ```
 
