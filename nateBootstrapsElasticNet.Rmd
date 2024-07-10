@@ -1,0 +1,112 @@
+---
+title: "Nate's bootstrap"
+author: "Nate"
+date: "2024-07-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+
+```
+
+
+```{r}
+# Install and Load Required Packages
+library(glmnet)
+library(caret)
+library(pROC)
+library(boot)
+library(data.table)
+
+# Load and Preprocess Data
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id))
+
+# Convert data to data.table
+dt <- as.data.table(RF_complete_df)
+
+# Exclude the 'outcome' column and prepare the predictor matrix
+if ("outcome" %in% names(dt)) {
+  predictor_names <- setdiff(names(dt), "outcome")  # Get names of predictor columns
+  x <- as.matrix(dt[, ..predictor_names])  # Exclude the outcome variable
+  y <- as.numeric(dt$outcome)  # Convert outcome to numeric
+} else {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Ensure x has at least two columns
+if (ncol(x) < 2) {
+  stop("The predictor matrix 'x' must have at least two columns.")
+}
+
+# Define Elastic Net Bootstrap Function
+elastic_net_bootstrap <- function(data, indices) {
+  dt_bootstrap <- data[indices, ]
+  x_bootstrap <- as.matrix(dt_bootstrap[, ..predictor_names])
+  y_bootstrap <- as.numeric(dt_bootstrap$outcome)
+  
+  # Split the data into training and test sets within the bootstrap sample
+  set.seed(123)
+  train_indices <- sample(1:nrow(dt_bootstrap), 0.7 * nrow(dt_bootstrap), replace = TRUE)
+  test_indices <- setdiff(1:nrow(dt_bootstrap), train_indices)
+  
+  x_train <- x_bootstrap[train_indices, ]
+  y_train <- y_bootstrap[train_indices]
+  x_test <- x_bootstrap[test_indices, ]
+  y_test <- y_bootstrap[test_indices]
+  
+  # Ensure there are samples in the test set
+  if (length(unique(y_train)) < 2 || length(unique(y_test)) < 2) {
+    return(NA)
+  }
+  
+  # Fit the Elastic Net model
+  cv_fit <- cv.glmnet(x_train, y_train, family = "binomial", alpha = 0.5)
+  best_lambda <- cv_fit$lambda.min
+  model <- glmnet(x_train, y_train, family = "binomial", alpha = 0.5, lambda = best_lambda)
+  
+  # Predict probabilities on the test set
+  pred_prob <- predict(model, newx = x_test, s = best_lambda, type = "response")
+  
+  # Calculate AUC
+  pred <- prediction(pred_prob, y_test)
+  perf <- performance(pred, measure = "auc")
+  auc_value <- perf@y.values[[1]]
+  
+  return(auc_value)
+}
+
+# Run Bootstrapping
+set.seed(123)
+boot_results <- boot(data = dt, statistic = elastic_net_bootstrap, R = 500)
+
+# Extract the AUC values
+auc_values <- boot_results$t
+
+# Remove NA values
+auc_values <- na.omit(auc_values)
+
+auc_values2 <- auc_values[!(auc_values < 0.6)]
+
+# Plot the distribution of AUC values
+hist(auc_values2, main = "Distribution of AUC Values from Bootstrap Samples",
+     xlab = "AUC", breaks = 30, col = "blue", border = "black")
+
+# Calculate and print the mean and standard error of the AUC values
+mean_auc <- mean(auc_values2)
+se_auc <- sd(auc_values2) / sqrt(length(auc_values2))
+cat("Mean AUC:", mean_auc, "\n")
+cat("Standard Error of AUC:", se_auc, "\n")
+
+# Plot the AUC values
+plot(auc_values2, type = "o", col = "blue", main = "AUC Values for Each Bootstrap Sample",
+     xlab = "Bootstrap Sample", ylab = "AUC")
+abline(h = mean_auc, col = "red", lwd = 2, lty = 2)
+legend("bottomright", legend = c("AUC values", "Mean AUC"), col = c("blue", "red"), lwd = 2, lty = c(1, 2))
+
+```
+
