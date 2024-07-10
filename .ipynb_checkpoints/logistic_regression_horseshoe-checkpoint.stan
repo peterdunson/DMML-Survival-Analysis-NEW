@@ -1,34 +1,38 @@
-// logistic_regression_horseshoe.stan
-
 data {
-  int<lower=0> N; // number of data points
+  int<lower=0> N; // number of observations
   int<lower=0> K; // number of predictors
   matrix[N, K] X; // predictor matrix
-  array[N] int<lower=0, upper=1> y; // outcome vector
+  array[N] int<lower=0, upper=1> y; // binary outcome
 }
+
 parameters {
+  vector[K] beta; // coefficients
   real alpha; // intercept
-  vector[K] z; // auxiliary variables for horseshoe prior
   real<lower=0> tau; // global shrinkage parameter
   vector<lower=0>[K] lambda; // local shrinkage parameters
 }
+
 transformed parameters {
-  vector[K] beta;
-  beta = z .* (lambda * tau);
+  vector[K] beta_tilde;
+  for (k in 1:K)
+    beta_tilde[k] = beta[k] * lambda[k] * tau;
 }
+
 model {
-  // Priors
-  alpha ~ normal(0, 1); // Prior for intercept
-  tau ~ cauchy(0, 1); // Prior for global shrinkage parameter
-  lambda ~ cauchy(0, 1); // Prior for local shrinkage parameters
-  z ~ normal(0, 1); // Prior for auxiliary variables
+  // Horseshoe prior
+  tau ~ cauchy(0, 1);
+  lambda ~ cauchy(0, 1);
+  beta ~ normal(0, 1);
+  alpha ~ normal(0, 1);
   
-  // Likelihood
-  y ~ bernoulli_logit(alpha + X * beta);
+  y ~ bernoulli_logit(alpha + X * beta_tilde);
 }
+
 generated quantities {
-  vector[N] y_pred;
+  array[N] real y_pred;
   for (n in 1:N) {
-    y_pred[n] = bernoulli_logit_rng(alpha + dot_product(X[n], beta));
+    y_pred[n] = bernoulli_logit_rng(alpha + dot_product(X[n], beta_tilde));
   }
 }
+
+
