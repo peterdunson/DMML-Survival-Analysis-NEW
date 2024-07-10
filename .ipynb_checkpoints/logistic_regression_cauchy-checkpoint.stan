@@ -1,5 +1,3 @@
-// logistic_regression_cauchy.stan
-
 data {
   int<lower=0> N; // number of observations
   int<lower=0> K; // number of predictors
@@ -27,3 +25,4 @@ generated quantities {
     y_pred[n] = bernoulli_logit_rng(alpha + dot_product(X[n], beta));
   }
 }
+
