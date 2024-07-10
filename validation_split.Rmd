@@ -1,0 +1,45 @@
+---
+title: "validation_split"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+
+```{r}
+# Load necessary library
+library(data.table)
+
+# Load Your Data
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id))
+
+# Convert data to data.table
+dt <- as.data.table(RF_complete_df)
+
+# Ensure the 'outcome' column is present
+if (!"outcome" %in% names(dt)) {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Normalize the predictors
+predictor_names <- setdiff(names(dt), "outcome")
+dt[, (predictor_names) := lapply(.SD, scale), .SDcols = predictor_names]
+
+# Identify and remove constant columns
+constant_cols <- sapply(dt, function(x) length(unique(x)) == 1)
+dt <- dt[, !constant_cols, with = FALSE]
+
+# Split the data into Training (70%) and Validation (30%) Sets
+set.seed(213)
+train_idx <- sample(1:nrow(dt), size = 0.7 * nrow(dt))
+training_rf <- dt[train_idx, ]
+valid_rf <- dt[-train_idx, ]
+
+# Print the dimensions of the datasets to verify the split
+cat("Training Set Dimensions: ", dim(training_rf), "\n")
+cat("Validation Set Dimensions: ", dim(valid_rf), "\n")
+
+```
+
