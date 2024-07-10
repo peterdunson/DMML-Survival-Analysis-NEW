@@ -429,8 +429,16 @@ roc_obj <- roc(y_test, pred)
 auc <- roc_obj$auc
 cat("AUC:", auc, "\n")
 
-# Plot ROC curve
-plot.roc(roc_obj, main = "ROC Curve (Test Data)")
+# Calculate AUC
+pred <- prediction(pred, y_test)
+perf <- performance(pred, measure = "auc")
+auc <- perf@y.values[[1]]
+cat("AUC:", auc, "\n")
+
+# Optionally, plot the ROC curve
+roc_perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+plot(roc_perf, col = "blue", lwd = 2, main = "ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = "red")
 
 # Calculate log-loss
 log_loss <- function(y_true, y_prob) {

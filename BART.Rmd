@@ -96,7 +96,7 @@ library(data.table)
 RF_impute_df <- fread("RF_imputation_NEW.csv")
 
 # Subset the data to exclude unnecessary columns and ensure the outcome variable is included and properly named
-RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id))
 
 # Ensure the outcome variable has valid factor levels
 RF_complete_df$outcome <- as.factor(RF_complete_df$outcome)
@@ -191,7 +191,7 @@ library(pROC)
 library(caret)
 
 RF_impute_df <- fread("RF_imputation_NEW.csv")
-RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id))
 
 # Load and preprocess the data
 dt <- as.data.table(RF_complete_df)
@@ -285,8 +285,19 @@ test_roc <- roc(y_test, test_predictions)
 test_auc <- test_roc$auc
 cat("Test AUC:", test_auc, "\n")
 
+# Calculate AUC
+pred <- prediction(test_predictions, y_test)
+perf <- performance(pred, measure = "auc")
+auc <- perf@y.values[[1]]
+cat("AUC:", auc, "\n")
+
+# Optionally, plot the ROC curve
+roc_perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+plot(roc_perf, col = "blue", lwd = 2, main = "ROC Curve")
+abline(a = 0, b = 1, lty = 2, col = "red")
+
 # Plot ROC curve for training and test data
-plot(train_roc, main = "ROC Curve (Training Data)")
+plot(test_roc, main = "ROC Curve (Training Data)")
 plot(test_roc, add = TRUE, col = "red")
 legend("bottomright", legend = c("Train", "Test"), col = c("black", "red"), lty = 1)
 
