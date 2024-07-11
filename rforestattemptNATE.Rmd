@@ -1,0 +1,191 @@
+---
+title: "random forest attempt"
+author: "Nate"
+date: "2024-07-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Install and load the necessary packages
+if (!require(randomForest)) install.packages("randomForest")
+if (!require(data.table)) install.packages("data.table")
+if (!require(pROC)) install.packages("pROC")
+if (!require(caret)) install.packages("caret")
+library(randomForest)
+library(data.table)
+library(pROC)
+library(caret)
+
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Ensure 'outcome' is a binary factor with valid R variable names as levels
+RF_impute_df$outcome <- factor(RF_impute_df$outcome, levels = c(0, 1), labels = c("Class0", "Class1"))
+
+# Select relevant columns
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id))
+
+# Handle missing values (remove rows with missing values)
+RF_complete_df <- na.omit(RF_complete_df)
+
+# Split the data into training and testing sets
+set.seed(123)
+sample_index <- sample(1:nrow(RF_complete_df), 0.7 * nrow(RF_complete_df))
+train_data <- RF_complete_df[sample_index, ]
+test_data <- RF_complete_df[-sample_index, ]
+
+# Set up cross-validation with caret
+train_control <- trainControl(method="cv", number=5, classProbs=TRUE, summaryFunction=twoClassSummary)
+
+# Define a grid of hyperparameters to search
+tune_grid <- expand.grid(mtry = c(2, 4, 6, 8, 10))
+
+# Train the model with cross-validation and grid search
+rf_model <- train(outcome ~ ., 
+                  data=train_data, 
+                  method="rf", 
+                  trControl=train_control,
+                  tuneGrid=tune_grid,
+                  metric="ROC",
+                  importance=TRUE)
+
+# Print the best model and its parameters
+print(rf_model)
+best_model <- rf_model$finalModel
+
+# Predict on the test set
+predictions <- predict(rf_model, newdata=test_data)
+
+# View the importance of variables
+varImp <- varImp(rf_model)
+print(varImp)
+plot(varImp)
+
+# Calculate AUC for test
+pred_prob <- predict(rf_model, newdata=test_data, type="prob")[,2]
+roc_obj <- roc(test_data$outcome, pred_prob)
+auc_value <- auc(roc_obj)
+print(auc_value)
+
+# Plot ROC curve
+plot(roc_obj, main = paste("ROC Curve (AUC =", round(auc_value, 2), ")"))
+
+# Calculate AUC for train
+pred_prob_train <- predict(rf_model, newdata=train_data, type="prob")[,2]
+roc_obj_train <- roc(train_data$outcome, pred_prob_train)
+auc_value_train <- auc(roc_obj_train)
+print(auc_value_train)
+
+# Plot ROC curve for train
+plot(roc_obj_train, main = paste("ROC Curve (AUC =", round(auc_value_train, 2), ")"))
+
+```
+```{r}
+# Install and load the necessary packages
+if (!require(randomForest)) install.packages("randomForest")
+if (!require(data.table)) install.packages("data.table")
+if (!require(pROC)) install.packages("pROC")
+if (!require(caret)) install.packages("caret")
+library(randomForest)
+library(data.table)
+library(pROC)
+library(caret)
+
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Ensure 'outcome' is a binary factor with valid R variable names as levels
+RF_impute_df$outcome <- factor(RF_impute_df$outcome, levels = c(0, 1), labels = c("Class0", "Class1"))
+
+# Select relevant columns
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, subject_id))
+
+# Handle missing values (remove rows with missing values)
+RF_complete_df <- na.omit(RF_complete_df)
+
+# Split the data into training and testing sets
+set.seed(123)
+sample_index <- sample(1:nrow(RF_complete_df), 0.7 * nrow(RF_complete_df))
+train_data <- RF_complete_df[sample_index, ]
+test_data <- RF_complete_df[-sample_index, ]
+
+# Set up cross-validation with caret
+train_control <- trainControl(method="cv", number=5, classProbs=TRUE, summaryFunction=twoClassSummary)
+
+# Define a grid of hyperparameters to search
+tune_grid <- expand.grid(mtry = c(2, 4, 6, 8, 10),
+                         ntree = c(500, 1000),
+                         nodesize = c(5, 10),
+                         maxnodes = c(10, 20, 30))
+
+# Function to train model with custom grid
+customRF <- list(type = "Classification", 
+                 library = "randomForest", 
+                 loop = NULL, 
+                 parameters = data.frame(parameter = c("mtry", "ntree", "nodesize", "maxnodes"), 
+                                         class = rep("numeric", 4), 
+                                         label = c("mtry", "ntree", "nodesize", "maxnodes")), 
+                 grid = function(x, y, len = NULL, search = "grid") tune_grid,
+                 fit = function(x, y, wts, param, lev, last, classProbs, ...) {
+                   randomForest(x, y, mtry = param$mtry, ntree = param$ntree, nodesize = param$nodesize, maxnodes = param$maxnodes, ...)
+                 },
+                 predict = function(modelFit, newdata, submodels = NULL) predict(modelFit, newdata),
+                 prob = function(modelFit, newdata, submodels = NULL) predict(modelFit, newdata, type = "prob"),
+                 varImp = function(object, ...) {
+                   varImp <- varImp(object)
+                   varImp
+                 })
+
+# Train the model with cross-validation and grid search
+rf_model <- train(outcome ~ ., 
+                  data=train_data, 
+                  method=customRF, 
+                  trControl=train_control,
+                  tuneGrid=tune_grid,
+                  metric="ROC",
+                  importance=TRUE)
+
+# Print the best model and its parameters
+print(rf_model)
+best_model <- rf_model$finalModel
+
+# Predict on the test set
+predictions <- predict(rf_model, newdata=test_data)
+
+# View the importance of variables
+varImp <- varImp(rf_model)
+print(varImp)
+plot(varImp)
+?varImp
+# Calculate AUC for test
+pred_prob <- predict(best_model, newdata=test_data, type="prob")[,2]
+roc_obj <- roc(test_data$outcome, pred_prob)
+auc_value <- auc(roc_obj)
+print(auc_value)
+
+# Plot ROC curve
+plot(roc_obj, main = paste("ROC Curve (AUC =", round(auc_value, 2), ")"))
+
+# Confusion matrix on test set
+test_pred_class <- ifelse(pred_prob > 0.5, 1, 0)
+conf_matrix_test <- table(Predicted = test_pred_class, Actual = as.numeric(test_data$outcome) - 1)
+print(conf_matrix_test)
+
+
+# Calculate AUC for train
+pred_prob_train <- predict(best_model, newdata=train_data, type="prob")[,2]
+roc_obj_train <- roc(train_data$outcome, pred_prob_train)
+auc_value_train <- auc(roc_obj_train)
+print(auc_value_train)
+
+# Plot ROC curve for train
+plot(roc_obj_train, main = paste("ROC Curve (AUC =", round(auc_value_train, 2), ")"))
+
+sum(RF_impute_df$CHD_with_no_MI)
+```
+
+
