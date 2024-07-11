@@ -11,8 +11,8 @@ parameters {
 }
 
 model {
-  beta ~ normal(0, 1);
-  alpha ~ normal(0, 1);
+  beta ~ normal(0, 1); // normal prior for coefficients
+  alpha ~ normal(0, 1); // normal prior for intercept
   y ~ bernoulli_logit(alpha + X * beta);
 }
 
@@ -22,6 +22,9 @@ generated quantities {
     y_pred[n] = bernoulli_logit_rng(alpha + dot_product(X[n], beta));
   }
 }
+
+
+
 
 
 
