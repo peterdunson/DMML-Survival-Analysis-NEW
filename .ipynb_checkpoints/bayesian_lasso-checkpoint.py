@@ -48,7 +48,8 @@ print(f"Keys in ppc: {ppc.posterior_predictive.keys()}")
 
 # Extract posterior predictive samples
 if "likelihood" in ppc.posterior_predictive:
-    y_pred_ppc = ppc.posterior_predictive["likelihood"].mean(axis=0).values.flatten()
+    # Average over chains and draws
+    y_pred_ppc = ppc.posterior_predictive["likelihood"].mean(dim=("chain", "draw")).values
     
     # Ensure y_pred_ppc is a probability array
     y_pred_ppc = np.clip(y_pred_ppc, 0, 1)
