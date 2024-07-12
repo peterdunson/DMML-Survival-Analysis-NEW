@@ -26,7 +26,6 @@ with pm.Model() as model:
     # Priors
     beta = pm.Laplace("beta", mu=0, b=1, shape=X_train.shape[1])
     intercept = pm.Normal("intercept", mu=0, sigma=1)
-    sigma = pm.HalfCauchy("sigma", beta=2.5)
     
     # Likelihood
     mu = intercept + at.dot(X_train, beta)
@@ -44,22 +43,22 @@ print(summary)
 with model:
     ppc = pm.sample_posterior_predictive(trace, var_names=["likelihood"])
 
-# Inspect the structure of ppc
-print(f"Structure of ppc: {ppc}")
-
 # Check the keys in ppc to ensure we are accessing the correct data
-print(f"Keys in ppc: {ppc.keys()}")
+print(f"Keys in ppc: {ppc.posterior_predictive.keys()}")
 
 # Extract posterior predictive samples
 if "likelihood" in ppc.posterior_predictive:
-    y_pred_ppc = np.mean(ppc.posterior_predictive["likelihood"], axis=0)
+    y_pred_ppc = ppc.posterior_predictive["likelihood"].mean(axis=0).values.flatten()
     
     # Ensure y_pred_ppc is a probability array
     y_pred_ppc = np.clip(y_pred_ppc, 0, 1)
     
     # Evaluate the model
-    auc = roc_auc_score(y_train, y_pred_ppc)
-    print(f"AUC: {auc}")
+    try:
+        auc = roc_auc_score(y_train, y_pred_ppc)
+        print(f"AUC: {auc}")
+    except ValueError as e:
+        print(f"Error calculating AUC: {e}")
 else:
     print("Key 'likelihood' not found in posterior predictive samples.")
     print(f"Available keys in posterior_predictive: {ppc.posterior_predictive.keys()}")
