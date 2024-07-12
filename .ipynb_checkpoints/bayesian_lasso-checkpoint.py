@@ -1,16 +1,18 @@
+#python bayesian_lasso.py
+
 import pymc as pm
 import pytensor.tensor as at
 import arviz as az
 import numpy as np
 import pandas as pd
-from sklearn.datasets import make_regression
+from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score
 
 # Step 1: Generate synthetic data
-X, y = make_regression(n_samples=1000, n_features=20, noise=0.1)
-y = (y > np.median(y)).astype(int)  # Convert to binary classification problem
+X, y = make_classification(n_samples=1000, n_features=20, n_classes=2, random_state=42)
+y = (y > np.median(y)).astype(int)  # Ensure binary classification
 
 # Standardize the features
 scaler = StandardScaler()
@@ -28,7 +30,7 @@ with pm.Model() as model:
     
     # Likelihood
     mu = intercept + at.dot(X_train, beta)
-    likelihood = pm.Bernoulli("y", logit_p=mu, observed=y_train)
+    likelihood = pm.Bernoulli("likelihood", logit_p=mu, observed=y_train)
     
     # Sample from the posterior
     trace = pm.sample(1000, tune=2000, return_inferencedata=True)
@@ -40,11 +42,24 @@ print(summary)
 
 # Posterior predictions
 with model:
-    ppc = pm.sample_posterior_predictive(trace, var_names=["y"], samples=1000)
+    ppc = pm.sample_posterior_predictive(trace, var_names=["likelihood"])
 
-# Calculate the posterior predictive mean
-y_pred_ppc = np.mean(ppc["y"], axis=0)
+# Inspect the structure of ppc
+print(f"Structure of ppc: {ppc}")
 
-# Evaluate the model
-auc = roc_auc_score(y_train, y_pred_ppc)
-print(f"AUC: {auc}")
+# Check the keys in ppc to ensure we are accessing the correct data
+print(f"Keys in ppc: {ppc.keys()}")
+
+# Extract posterior predictive samples
+if "likelihood" in ppc.posterior_predictive:
+    y_pred_ppc = np.mean(ppc.posterior_predictive["likelihood"], axis=0)
+    
+    # Ensure y_pred_ppc is a probability array
+    y_pred_ppc = np.clip(y_pred_ppc, 0, 1)
+    
+    # Evaluate the model
+    auc = roc_auc_score(y_train, y_pred_ppc)
+    print(f"AUC: {auc}")
+else:
+    print("Key 'likelihood' not found in posterior predictive samples.")
+    print(f"Available keys in posterior_predictive: {ppc.posterior_predictive.keys()}")
