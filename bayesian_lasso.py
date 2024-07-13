@@ -439,8 +439,8 @@ y = (y > np.median(y)).astype(int)  # Ensure binary classification
 scaler = StandardScaler()
 X = scaler.fit_transform(X)
 
-# Initialize 20-fold cross-validation
-kf = KFold(n_splits=20, shuffle=True, random_state=42)
+# Initialize 100-fold cross-validation
+kf = KFold(n_splits=100, shuffle=True, random_state=42)
 
 train_aucs = []
 test_aucs = []
@@ -448,11 +448,17 @@ train_conf_matrices = []
 test_conf_matrices = []
 
 # K-fold Cross-Validation
-for train_index, test_index in kf.split(X):
+for fold, (train_index, test_index) in enumerate(kf.split(X), 1):
     X_train, X_test = X[train_index], X[test_index]
     y_train, y_test = y[train_index], y[test_index]
 
-    # Step 2: Define the PyMC model
+    # Check for data leakage by verifying there are no overlapping indices
+    if set(train_index) & set(test_index):
+        raise ValueError(f"Data leakage detected in fold {fold}!")
+
+    print(f"Fold {fold} - Train indices: {train_index}, Test indices: {test_index}")
+
+    # Step 2: Define the PyMC model within the fold loop to avoid data leakage
     with pm.Model() as model:
         # Priors
         beta = pm.Laplace("beta", mu=0, b=1, shape=X_train.shape[1])
@@ -502,7 +508,8 @@ print(f"Mean Train AUC: {np.mean(train_aucs)} ± {np.std(train_aucs)}")
 print(f"Mean Test AUC: {np.mean(test_aucs)} ± {np.std(test_aucs)}")
 
 # Print confusion matrices for all folds
-for i in range(20):
+for i in range(100):
     print(f"Train Confusion Matrix Fold {i+1}:\n{train_conf_matrices[i]}")
     print(f"Test Confusion Matrix Fold {i+1}:\n{test_conf_matrices[i]}")
+
 
