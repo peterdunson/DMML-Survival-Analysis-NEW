@@ -1,0 +1,41 @@
+---
+title: "supervised_clustering"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(cluster)
+
+# Load your data
+data <- read.csv("RF_imputation_NEW.csv")
+
+# Drop specified columns
+data <- data %>%
+  select(-deathtime, -survival_time, -LOS, -Unnamed_0, -V1, -admittime, -ID, -group, -tLOS, -subject_id)
+
+# Convert 'outcome' to integer type
+data$outcome <- as.integer(data$outcome)
+
+# Standardize the features
+data_scaled <- scale(data %>% select(-outcome))
+
+# Perform K-means clustering
+set.seed(42)
+kmeans_result <- kmeans(data_scaled, centers = 3)  # Assuming we want 3 clusters
+data$cluster <- kmeans_result$cluster
+
+# Visualize the clusters
+ggplot(data, aes(x = age, y = BMI, color = factor(cluster))) +
+  geom_point() +
+  labs(title = "K-means Clustering", color = "Cluster")
+
+# Check the cluster distribution by outcome
+cluster_outcome_dist <- table(data$cluster, data$outcome)
+print(cluster_outcome_dist)
+
+```
+
