@@ -1,0 +1,106 @@
+---
+title: "supervised_clustering"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+Bayesian Profile Clustering
+
+
+```{r}
+# Ensure libraries are loaded
+library(data.table)
+library(dplyr)
+library(parallel)
+library(PReMiuM)
+
+# Load the dataset using fread
+data <- fread("RF_imputation_NEW.csv")
+
+# Preprocess the data by removing unwanted columns
+data <- data %>%
+  select(-deathtime, -survival_time, -LOS, -Unnamed_0, -V1, -admittime, -ID, -group, -tLOS, -subject_id)
+
+# Ensure the outcome variable is correctly formatted
+data$outcome <- as.integer(data$outcome)
+
+# Define the covariates and outcome
+covariates <- setdiff(colnames(data), "outcome")
+outcome <- "outcome"
+
+# Create a new data frame to ensure the outcome is correctly handled
+data_premium <- data %>%
+  select(all_of(c(covariates, outcome)))
+
+# Convert outcome to factor (explicit step for safety)
+data_premium$outcome <- as.factor(data_premium$outcome)
+
+# Print the new data frame to verify structure
+print(head(data_premium))
+print(colnames(data_premium))
+
+# Debug: Check if the 'outcome' column is recognized correctly
+print(data_premium$outcome)
+
+# Function to run profile regression
+runProfileRegression <- function(data_premium, covariates, outcome) {
+  library(PReMiuM)
+  library(data.table)
+  library(dplyr)
+  
+  if (!outcome %in% colnames(data_premium)) {
+    stop("Outcome variable is not found in the data frame.")
+  }
+  
+  print("Column names in data_premium:")  # Debug: Print column names to verify structure
+  print(colnames(data_premium))
+  print("First few rows of data_premium:")  # Debug: Print first few rows to verify data
+  print(head(data_premium))
+  
+  # Verify that the outcome variable exists and is correctly referenced
+  if (!outcome %in% colnames(data_premium)) {
+    stop("The outcome column is not correctly referenced in the data frame.")
+  }
+  
+  print("Running profile regression with the following outcome column:")
+  print(outcome)
+  
+  # Check if the outcome column is correctly formatted
+  print("Outcome column data type:")
+  print(class(data_premium[[outcome]]))
+  
+  print("Data types of all columns:")
+  print(sapply(data_premium, class))
+  
+  # Convert outcome to numeric
+  data_premium[[outcome]] <- as.numeric(as.character(data_premium[[outcome]]))
+  
+  result <- tryCatch({
+    profRegr(yModel = "Bernoulli",
+             xModel = "Discrete",
+             nSweeps = 1000,
+             nBurn = 500,
+             data = data_premium,
+             output = "output",
+             covNames = covariates,
+             outcome = outcome,
+             nClusInit = 20)
+  }, error = function(e) {
+    print("Error during profRegr:")
+    print(e)
+    stop(e)
+  })
+  
+  return(result)
+}
+
+# Test the function directly without parallelization first
+test_result <- runProfileRegression(data_premium, covariates, outcome)
+
+```
+
+
+
+
