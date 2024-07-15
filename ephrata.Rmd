@@ -1,43 +1,370 @@
 ---
 title: "DMML_test"
-author: " "
+author: ' '
 date: "`r Sys.Date()`"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
+
 
 ```{r}
 library(tidyverse)
 library(dplyr)
 library(ggplot2)
 library(data.table)
+library(tableone)
+library(tidyr)
+library(patchwork)
+library(naniar)
+library(janitor)
+```
+
+```{r}
+data <- read.csv("merged_df_NEW.csv")
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+data = subset(data, select = -c(deathtime, survival_time))
+
+```
+
+
+
+```{r}
+vars <- c("age", "gendera")
+
+data$gendera <- factor(data$gendera, levels = c(1, 2), labels = c("Male", "Female"))
+
+table1 <- CreateTableOne(vars = vars, strata = "outcome", data = data)
+
+print(table1, showAllLevels = TRUE)
+
+```
+
+
+
+
+```{r}
+female_data <- data[data$gendera == "Female", ]
+summary_stats <- aggregate(age ~ outcome, data = female_data, FUN = function(x) c(mean = mean(x), median = median(x)))
+
+# Count females stratified by outcome
+n_females <- table(female_data$outcome)
+
+# Create a table combining summary statistics and counts
+result_table <- data.frame(
+  outcome = c("0", "1"),
+  mean_age = summary_stats$age[, "mean"],
+  median_age = summary_stats$age[, "median"],
+  n_female = as.vector(n_females)
+)
+
+# Print the result table
+print(result_table)
 ```
 
 
 ```{r}
-merged_df <- fread("multiple_imputation_NEW.csv")
-merged_df$survival_time = as.numeric(difftime(merged_df$deathtime, merged_df$admittime, units = "day"))
+
+
+
+data_clean <- data %>%
+  clean_names() %>%
+  remove_empty("cols")
+
+data_filtered <- data_clean %>%
+  select_if(~ any(is.na(.)))
+
+gg_miss_var(data_filtered) +
+  labs(
+    title = "Missing Data Overview",
+    x = "Variables",
+    y = "Number of Missing Values"
+  )
+
+
 ```
 
 
 ```{r}
-str (merged_df)
+data_clean <- data %>%
+  clean_names() %>%
+  remove_empty("cols")
+
+data_filtered <- data_clean %>%
+  select_if(~ any(is.na(.)))
+
+missing_data <- data_filtered %>%
+  summarise_all(~sum(is.na(.))) %>%
+  gather(key = "variable", value = "missing_count") %>%
+  mutate(
+    total_count = nrow(data_filtered),
+    missing_percent = (missing_count / total_count) * 100
+  )
+new_names <- c(
+  pco2 = "PCO2",
+  ph = "pH",
+  basophils = "Basophils",
+  lactic_acid = "Lactic Acid",
+  bmi = "BMI",
+  creatine_kinase = "Creatine Kinase",
+  los = "LOS",
+  lymphocyte = "Lymphocyte",
+  neutrophils = "Neutrophils",
+  language = "Language",
+  urine_output = "Urine Output",
+  marital_status = "Marital Status",
+  pt = "PT",
+  inr = "INR",
+  temperature = "Temperature",
+  glucose = "Glucose",
+  systolic_blood_pressure = "Systolic Blood Pressure",
+  diastolic_blood_pressure = "Diastolic Blood Pressure",
+  sp_o2 = "SpO2",
+  respiratory_rate = "Respiratory Rate",
+  heart_rate = "Heart Rate",
+  blood_calcium = "Blood Calcium"
+)
+
+ggplot(missing_data, aes(x = reorder(variable, -missing_count), y = missing_count)) +
+  geom_bar(stat = "identity", fill = "steelblue", width = 0.8) + 
+  geom_text(aes(label = paste0(round(missing_percent, 1), "%")), 
+            vjust = -0.5, 
+            color = "black",
+            size = 3, # Adjust size to minimize text
+            nudge_y = 5) +
+  labs(
+    title = "Missing Data Overview",
+    x = "Variables",
+    y = "Number of Missing Values"
+  ) +
+  scale_x_discrete(labels = new_names) + # Apply the new names
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
 
-
-
-
-
-
-
-
-# some new columns
 ```{r}
-merged_df$comorb_score = merged_df$gendera + merged_df$hypertensive + merged_df$atrialfibrillation + merged_df$`CHD with no MI` + merged_df$diabetes + merged_df$deficiencyanemias + merged_df$depression + merged_df$Hyperlipemia + merged_df$`Renal failure` + merged_df$COPD
-
-merged_df$LOS = as.numeric(difftime(merged_df$dischtime, merged_df$admittime, units = "days")) * !merged_df$outcome
-merged_df$LOS = ifelse(!merged_df$outcome, as.numeric(difftime(merged_df$dischtime, merged_df$admittime, units = "days")), NA)
-
-merged_df$tLOS <- ifelse(is.na(merged_df$LOS), merged_df$survival_time, merged_df$LOS)
+str(data)
 ```
+
+
+```{r}
+summary_stats <- data %>%
+  select(age, gendera, BMI) %>%
+  summary()
+
+print(summary_stats)
+```
+
+
+
+
+
+
+
+
+## EDA
+
+```{r}
+alive_dead_data <- data.frame(data %>% subset(select = -c(V1)) %>%
+  dplyr::filter(outcome %in% c(0, 1)))
+```
+
+
+```{r}
+str(data)
+```
+
+
+
+
+
+```{r}
+library(ggplot2)
+library(patchwork)
+
+# Define the function to create histograms with vertical mean line
+create_histogram <- function(data, variable, units) {
+  mean_value <- mean(data[[variable]], na.rm = TRUE)
+  
+  ggplot(data, aes_string(x = variable, fill = "factor(outcome)")) +
+    geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.5, bins = 20) +
+    geom_vline(xintercept = mean_value, col = "red", lwd = 1, linetype = "dotted") +
+    scale_fill_manual(values = c("blue", "green"), labels = c("Alive", "Dead")) +
+    labs(title = paste("Distribution of", gsub("\\.", " ", variable), "by Outcome"),
+         x = paste(gsub("\\.", " ", variable), "(", units, ")"),
+         y = "Density",
+         fill = "Outcome") +
+    theme_minimal()
+}
+
+# List of variables to plot with their units
+variables <- list(
+  "Blood.calcium" = "Blood Calcium units",
+  "Creatinine" = "Creatinine units",
+  "PH" = "PH units",
+  "Urea.nitrogen" = "Urea Nitrogen units"
+)
+
+# Create plots
+plots <- lapply(names(variables), function(var) create_histogram(data, var, variables[[var]]))
+
+# Arrange plots in a grid layout using patchwork
+combined_plots <- wrap_plots(plots, nrow = 2, ncol = 2)
+
+# Print combined plots
+print(combined_plots)
+```
+
+```{r}
+
+
+create_histogram <- function(data, variable, units) {
+  mean_value <- mean(data[[variable]], na.rm = TRUE)
+  
+  ggplot(data, aes_string(x = variable, fill = "factor(outcome)")) +
+    geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.5, bins = 20) +
+    geom_vline(xintercept = mean_value, col = "red", lwd = 1, linetype = "dotted") +
+    scale_fill_manual(values = c("blue", "green"), labels = c("Alive", "Dead")) +
+    labs(title = paste("", gsub("\\.", " ", variable), "by Outcome"),
+         x = paste(gsub("\\.", " ", variable), "(", units, ")"),
+         y = "Density",
+         fill = "Outcome") +
+    theme_minimal() 
+}
+
+variables <- list(
+  "Blood.calcium"="mEq/L",
+  "Creatinine" =" mg/dL",
+  "PH" = "hydrogen ion concentration",
+  "Urea.nitrogen" = "mg/dL"
+)
+
+
+plots <- lapply(names(variables), function(var) create_histogram(data, var, variables[[var]]))
+
+
+combined_plots <- wrap_plots(plots, nrow = 2, ncol = 2)
+
+
+print(combined_plots)
+
+
+
+```
+
+
+```{r}
+library(ggplot2)
+library(patchwork)  # For arranging plots
+
+# Define the function to create histograms
+create_histogram <- function(data, variable) {
+  ggplot(data, aes_string(x = variable, fill = "factor(outcome)")) +
+    geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.5, bins = 20) +
+    scale_fill_manual(values = c("blue", "red"), labels = c("Alive", "Dead")) +
+    labs(title = paste("Distribution of", variable, "by Outcome"),
+         x = variable,
+         y = "Density",
+         fill = "Outcome") +
+    facet_wrap(~ outcome, scales = "free_y") +  
+    theme_minimal()
+}
+
+
+# List of variables to plot
+variables <- c("Blood.calcium", "Creatinine", "PH", "Urea.nitrogen")
+
+# Create plots
+plots <- lapply(variables, function(var) create_histogram(data, var))
+
+# Arrange plots in a grid layout using patchwork
+combined_plots <- wrap_plots(plots, nrow = 2, ncol = 2)
+
+# Print combined plots
+print(combined_plots)
+
+```
+
+```{r}
+# Example comorbidities: hypertensive, diabetes, COPD
+comorbidities <- data %>%
+  select(outcome, hypertensive, diabetes, COPD) %>%
+  gather(key = "comorbidity", value = "presence", -outcome)
+
+bar_chart <- ggplot(comorbidities, aes(x = comorbidity, fill = outcome)) +
+  geom_bar(position = "fill") +
+  labs(title = "Mortality Rates Across Different Comorbidities", x = "Comorbidities", y = "Proportion") +
+  theme_minimal()
+
+bar_chart
+```
+
+
+
+
+
+```{r}
+str(data)
+```
+
+#elastic net
+
+```{r}
+
+library(glmnet)
+library(data.table)
+
+```
+
+```{r}
+mult_complete_df = subset(mult_impute_df, select = -c(deathtime, survival_time, LOS, outcome, Unnamed_0, V1, admittime, ID, group))
+```
+
+```{r}
+set.seed(213)  
+alpha.value <-seq(0, 1, by =0.1)
+x <- as.matrix(mult_complete_df)  
+y <- mult_impute_df$outcome
+for (alpha in alpha.value ){
+  cv_fit <- cv.glmnet(x, y, family = "binomial", alpha = alpha ) 
+}
+cv_fit
+```
+
+```{r}
+m1 <- glmnet(x, y, family = "binomial", alpha = .5, lambda = 0.006981)
+m1
+```
+
+```{r}
+#mult_complete_df1 = subset(mult_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group))
+#set.seed(231)
+#random.sample <- createDataPartition(mult_complete_df1$outcome, p=0.8, list=FALSE)
+#training.dataset<- mult_complete_df1[random.sample, ]
+#testing.dataset <- mult_complete_df1[-random.sample, ]
+
+#model1 <- lm(outcome ~., data = training.dataset )
+
+#pred1 <- predict(model1, testing.dataset)
+
+#data.frame(R2 = R2(pred1,testing.dataset $ outcome),
+     #      )
+```
+
+```{r}
+str(mult_impute_df)
+```
+
+
+
+```{r}
+cor_matrix <- cor(mult_complete_df, use = "complete.obs")
+high_corr_pairs <- which(abs(cor_matrix) > 0.7, arr.ind = TRUE)
+high_corr_pairs <- high_corr_pairs[high_corr_pairs[,1] != high_corr_pairs[,2],]
+proportion_high_corr <- nrow(high_corr_pairs) / (ncol(mult_impute_df) * (ncol(mult_complete_df) - 1))
+print(proportion_high_corr)
+```
+
+
+
 

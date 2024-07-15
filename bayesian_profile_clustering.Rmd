@@ -1,0 +1,212 @@
+---
+title: "supervised_clustering"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+Bayesian Profile Clustering
+
+
+simple
+```{r}
+# Load necessary libraries
+library(data.table)
+library(dplyr)
+library(PReMiuM)
+
+# Load the dataset using fread
+data <- fread("RF_imputation_NEW.csv")
+
+# Preprocess the data by removing unwanted columns
+data <- data %>%
+  select(-deathtime, -survival_time, -LOS, -Unnamed_0, -V1, -admittime, -ID, -group, -tLOS, -subject_id)
+
+# Ensure the outcome variable is correctly formatted as a factor and binary
+data$outcome <- as.factor(data$outcome)
+if (!all(levels(data$outcome) %in% c("0", "1"))) {
+  stop("Outcome variable must be binary (0 and 1).")
+}
+
+# Print the structure of the data 
+print(str(data))
+
+# Print the unique values of the outcome column
+print(unique(data$outcome))
+
+# Define the covariates and outcome
+covariates <- setdiff(colnames(data), "outcome")
+
+# Create a new data frame to ensure the outcome is correctly handled
+data_premium <- data %>%
+  select(all_of(c(covariates, "outcome")))
+
+# Print the structure of data_premium
+print(str(data_premium))
+print(colnames(data_premium))
+
+# Verify if the outcome column is present in the data frame
+if (!"outcome" %in% colnames(data_premium)) {
+  stop("Outcome variable is not found in the data frame.")
+}
+
+# Convert outcome to factor if necessary
+if (!is.factor(data_premium$outcome)) {
+  data_premium$outcome <- as.factor(data_premium$outcome)
+}
+
+outcome_var <- "outcome"
+
+# Verify the structure and unique values again
+print(str(data_premium))
+print(unique(data_premium$outcome))
+
+# Run profile regression
+result <- tryCatch({
+  profRegr(
+    yModel = "Bernoulli",
+    xModel = "Discrete",
+    nSweeps = 1000,
+    nBurn = 500,
+    data = data_premium,
+    output = "output",
+    covNames = covariates,
+    outcome = outcome_var # Specify the outcome column name as a string
+    nClusInit = 20
+  )
+}, error = function(e) {
+  print("Error during profRegr:")
+  print(e)
+  stop(e)
+})
+
+```
+
+
+
+```{r}
+# Load necessary libraries
+library(data.table)
+library(dplyr)
+library(PReMiuM)
+
+# Load the dataset using fread
+data <- fread("RF_imputation_NEW.csv")
+
+# Preprocess the data by removing unwanted columns
+data <- data %>%
+  select(-deathtime, -survival_time, -LOS, -Unnamed_0, -V1, -admittime, -ID, -group, -tLOS, -subject_id)
+
+# Ensure the outcome variable is correctly formatted and binary
+data$outcome <- as.factor(data$outcome)
+if (!all(levels(data$outcome) %in% c("0", "1"))) {
+  stop("Outcome variable must be binary (0 and 1).")
+}
+
+# Define the covariates and outcome
+covariates <- setdiff(colnames(data), "outcome")
+
+# Create a new data frame to ensure the outcome is correctly handled
+data_premium <- data %>%
+  select(all_of(c(covariates, "outcome")))
+
+# Verify if the outcome column is present in the data frame
+if (!"outcome" %in% colnames(data_premium)) {
+  stop("Outcome variable is not found in the data frame.")
+}
+
+# Convert outcome to numeric
+data_premium$outcome <- as.numeric(as.character(data_premium$outcome))
+
+# Print the structure of data_premium
+print(str(data_premium))
+print(colnames(data_premium))
+print(unique(data_premium$outcome))
+
+# Explicitly define the covariates for PReMiuM
+discreteCovs <- covariates
+continuousCovs <- NULL
+
+# Run profile regression with detailed debugging output
+result <- tryCatch({
+  profRegr(
+    yModel = "Bernoulli",
+    xModel = "Discrete",
+    nSweeps = 1000,
+    nBurn = 500,
+    data = data_premium,
+    output = "output",
+    covNames = covariates,
+    outcome = "outcome",  
+    nClusInit = 20
+  )
+}, error = function(e) {
+  print("Error during profRegr:")
+  print(e)
+  stop(e)
+})
+
+# Print the result
+print(result)
+
+class(data_premium$outcome)
+
+```
+
+TEST DATA
+```{r}
+# Load necessary libraries
+library(data.table)
+library(dplyr)
+library(PReMiuM)
+
+# Create a simple example dataset
+example_data <- data.frame(
+  age = c(23, 45, 34, 25, 65),
+  gendera = c(1, 2, 1, 1, 2),
+  BMI = c(22.4, 27.8, 24.6, 21.7, 29.3),
+  hypertensive = c(0, 1, 0, 0, 1),
+  atrialfibrillation = c(0, 1, 0, 0, 1),
+  CHD_with_no_MI = c(0, 0, 1, 0, 1),
+  diabetes = c(0, 1, 0, 0, 1),
+  deficiencyanemias = c(0, 0, 0, 1, 1),
+  depression = c(0, 0, 1, 0, 1),
+  outcome = as.factor(c(0, 1, 1, 0, 1))
+)
+
+# Define covariates and outcome
+example_covariates <- setdiff(colnames(example_data), "outcome")
+#example_outcome <- "outcome"
+
+# Verify structure and column names
+print(colnames(example_data))
+print(class(example_data$outcome))
+print(unique(example_data$outcome))
+
+# Run profile regression
+result <- tryCatch({
+  profRegr(
+    yModel = "Bernoulli",
+    xModel = "Discrete",
+    nSweeps = 100,
+    nBurn = 50,
+    data = example_data,
+    output = "output_example",
+    covNames = example_covariates,
+    outcome = "outcome",  # Specify the outcome column name as a string
+    nClusInit = 5
+  )
+}, error = function(e) {
+  print("Error during profRegr:")
+  print(e)
+  stop(e)
+})
+
+print(result)
+
+class(example_data$outcome)
+
+```
+
+
