@@ -56,8 +56,6 @@ if (!is.factor(data_premium$outcome)) {
   data_premium$outcome <- as.factor(data_premium$outcome)
 }
 
-outcome_var <- "outcome"
-
 # Verify the structure and unique values again
 print(str(data_premium))
 print(unique(data_premium$outcome))
@@ -72,7 +70,7 @@ result <- tryCatch({
     data = data_premium,
     output = "output",
     covNames = covariates,
-    outcome = outcome_var # Specify the outcome column name as a string
+    outcome = "outcome", # Specify the outcome column name as a string
     nClusInit = 20
   )
 }, error = function(e) {
@@ -82,6 +80,69 @@ result <- tryCatch({
 })
 
 ```
+
+
+```{r}
+# Load necessary libraries
+library(data.table)
+library(dplyr)
+library(PReMiuM)
+
+# Load the dataset using fread
+data <- fread("RF_imputation_NEW.csv")
+
+# Preprocess the data by removing unwanted columns
+data <- data %>%
+  select(-deathtime, -survival_time, -LOS, -Unnamed_0, -V1, -admittime, -ID, -group, -tLOS, -subject_id)
+
+# Ensure the outcome variable is correctly formatted as a factor and binary
+data$outcome <- as.factor(data$outcome)
+if (!all(levels(data$outcome) %in% c("0", "1"))) {
+  stop("Outcome variable must be binary (0 and 1).")
+}
+
+# Print the structure of the data and the unique values of the outcome column
+print(str(data))
+print(unique(data$outcome))
+
+# Define the covariates and outcome
+covariates <- setdiff(colnames(data), "outcome")
+
+# Create a new data frame to ensure the outcome is correctly handled
+data_premium <- data %>%
+  select(all_of(c(covariates, "outcome")))
+
+# Print the structure of data_premium
+print(str(data_premium))
+print(colnames(data_premium))
+
+# Verify if the outcome column is present in the data frame
+if (!"outcome" %in% colnames(data_premium)) {
+  stop("Outcome variable is not found in the data frame.")
+}
+
+# Ensure outcome is a factor
+data_premium$outcome <- as.factor(data_premium$outcome)
+
+# Verify the structure and unique values again
+print(str(data_premium))
+print(unique(data_premium$outcome))
+
+# Run profile regression
+result <- profRegr(
+  yModel = "Bernoulli",
+  xModel = "Discrete",
+  nSweeps = 1000,
+  nBurn = 500,
+  data = data_premium,
+  output = "output",
+  covNames = covariates,
+  outcome = "outcome",  # Specify the outcome column name as a string
+  nClusInit = 20
+)
+
+```
+
 
 
 
