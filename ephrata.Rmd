@@ -96,77 +96,73 @@ ggplot(missing_data, aes(x = reorder(variable, -missing_count), y = missing_coun
 ```
 
 
-## EDA
-
-
-```{r}
-library(ggplot2)
-library(patchwork)
-
-# Define the function to create histograms with vertical mean line
-create_histogram <- function(data, variable, units) {
-  mean_value <- mean(data[[variable]], na.rm = TRUE)
-  
-  ggplot(data, aes_string(x = variable, fill = "factor(outcome)")) +
-    geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.5, bins = 20) +
-    geom_vline(xintercept = mean_value, col = "red", lwd = 1, linetype = "dotted") +
-    scale_fill_manual(values = c("blue", "green"), labels = c("Alive", "Dead")) +
-    labs(title = paste("Distribution of", gsub("\\.", " ", variable), "by Outcome"),
-         x = paste(gsub("\\.", " ", variable), "(", units, ")"),
-         y = "Density",
-         fill = "Outcome") +
-    theme_minimal()
-}
-
-# List of variables to plot with their units
-variables <- list(
-  "Blood.calcium" = "Blood Calcium units",
-  "Creatinine" = "Creatinine units",
-  "PH" = "PH units",
-  "Urea.nitrogen" = "Urea Nitrogen units"
-)
-
-# Create plots
-plots <- lapply(names(variables), function(var) create_histogram(data, var, variables[[var]]))
-
-# Arrange plots in a grid layout using patchwork
-combined_plots <- wrap_plots(plots, nrow = 2, ncol = 2)
-
-# Print combined plots
-print(combined_plots)
-```
-
-
-
-
 
 
 ```{r}
 library(glmnet)
-library(selectiveInference)
 library(data.table)
+library(boot)
+
+bootstrap_function <- function(data, indices) {
+  # Resample the data
+  boot_x <- x_train[indices, ]
+  boot_y <- y_train[indices]
+  
+  # Fit the Elastic Net model
+  fit <- glmnet(boot_x, boot_y, family = "binomial", alpha = best_alpha, lambda = best_lambda)
+  
+  # Extract the coefficients
+  as.vector(coef(fit, s = best_lambda))
+}
+
+# Perform bootstrap resampling
+set.seed(213)
+boot_results <- boot(data = x_train, statistic = bootstrap_function, R = 1000)
+
+# Extract the coefficients from the bootstrap results
+coef_matrix <- t(boot_results$t)
+
+# Get the variable names for the coefficients
+coef_names <- rownames(coef(glmnet(x_train, y_train, family = "binomial", alpha = best_alpha, lambda = best_lambda)))
+
+# Function to calculate confidence intervals for each coefficient
+get_ci <- function(bootstrap_coefs) {
+  apply(bootstrap_coefs, 1, function(coef_values) {
+    quantile(coef_values, probs = c(0.025, 0.975))
+  })
+}
+
+# Calculate confidence intervals for each coefficient
+ci_matrix <- get_ci(coef_matrix)
+
+# Create a data frame to store the confidence intervals
+ci_df <- data.frame(
+  Variable = coef_names,
+  Lower_2.5 = ci_matrix[1, ],
+  Upper_97.5 = ci_matrix[2, ]
+)
+
+ci_df <- ci_df[ci_df$Variable != "(Intercept)", ]
+print(ci_df)
 ```
 
 ```{r}
-best_alpha <- 1
-best_lambda <- 0.05
-final_model <- glmnet(x_train, 
-                      y_train, 
-                      family = "binomial", 
-                      alpha = best_alpha, 
-                      lambda = best_lambda, thresh = 1e-10)
-x_matrix <- model.matrix(y_train ~ x_train)
-# class(x_matrix)
-selected_vars <- which(coef(final_model, s = best_lambda) != 0)
-selective_results <- fixedLassoInf(x_matrix[,selected_vars][,-1], 
-                                   y_train, 
-                                   family="binomial", 
-                                   beta = coef(final_model, s = best_lambda, family="binomial")[selected_vars], 
-                                   lambda = best_lambda * nrow(x_train), 
-                                   sigma = sd(y_train - predict(final_model, x_train)))
-print(selective_results)
-# cor(x_matrix[,selected_vars][,-1])
+library(ggplot2)
+ggplot(ci_df, aes(x = Variable, ymin = Lower_2.5, ymax = Upper_97.5)) +
+  geom_pointrange(aes(y = (Lower_2.5 + Upper_97.5) / 2), color = "blue") +
+  coord_flip() +
+  labs(title = "95% Confidence Intervals for Coefficients",
+       y = "Coefficient Value",
+       x = "Variable") +
+  theme_minimal()
 ```
-
-
+```{r}
+significant_vars <- ci_df[ci_df$Lower_2.5 > 0 | ci_df$Upper_97.5 < 0, ]
+insignificant_vars <- ci_df[ci_df$Lower_2.5 <= 0 & ci_df$Upper_97.5 >= 0, ]
+cat("Significant Variables:\n")
+print(significant_vars)
+cat("Insignificant Variables:\n")
+print(insignificant_vars)
+significant_variable_names <- significant_vars$Variable
+```
 
