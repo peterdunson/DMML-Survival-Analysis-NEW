@@ -155,6 +155,7 @@ ggplot(ci_df, aes(x = Variable, ymin = Lower_2.5, ymax = Upper_97.5)) +
        y = "Coefficient Value",
        x = "Variable") +
   theme_minimal()
+
 ```
 ```{r}
 significant_vars <- ci_df[ci_df$Lower_2.5 > 0 | ci_df$Upper_97.5 < 0, ]
