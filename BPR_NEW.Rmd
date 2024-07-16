@@ -1,14 +1,12 @@
 ---
-title: "supervised_clustering"
+title: "bpr_NEW"
 author: "Peter"
 date: "`r Sys.Date()`"
 output: html_document
 ---
 
 
-Bayesian Profile Clustering
-
-parallel processing
+parallel:
 ```{r}
 # Load necessary libraries
 library(data.table)
@@ -92,9 +90,8 @@ for (res in results) {
   plot_risk_profiles_in_subsets(res$riskProfileObj, covariates)
   summary(res$riskProfileObj)
 }
-
-
 ```
+
 
 
 
