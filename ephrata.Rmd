@@ -18,14 +18,74 @@ library(tidyr)
 library(patchwork)
 library(naniar)
 library(janitor)
+library(glmnet)
+library(data.table)
+library(pROC)
+library(ROCR)
+library(ggplot2)
+```
+
+```{r}
+library(ggplot2)
+library(patchwork)
+
+create_histogram <- function(data, variable, units) {
+  mean_alive <- mean(data[data$outcome == "0", variable], na.rm = TRUE)
+  mean_dead <- mean(data[data$outcome == "1", variable], na.rm = TRUE)
+  
+  p <- ggplot(data, aes_string(x = variable, fill = "factor(outcome)")) +
+    geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.5, bins = 20) +
+    geom_vline(xintercept = mean_alive, col = "blue", lwd = 1, linetype = "dotted") +
+    geom_vline(xintercept = mean_dead, col = "green", lwd = 1, linetype = "dotted") +
+    scale_fill_manual(values = c("blue", "green"), labels = c("Alive", "Dead")) +
+    labs(title = paste("", gsub("\\.", " ", variable), "by Outcome"),
+         x = paste(gsub("\\.", " ", variable), ifelse(variable == "PH", "", paste("(", units, ")"))),
+         y = "Density",
+         fill = "Outcome") +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 12, face = "bold"),  
+      axis.title = element_text(size = 10),                 
+      axis.text = element_text(size = 8)                    
+    )
+  
+  return(p)
+}
+
+# List of variables to plot with their units
+variables <- list(
+  "Blood.calcium" = "mEq/L",
+  "Bicarbonate" = "mg/dL",
+  "PH" = "hydrogen ion concentration",
+  "Urea.nitrogen" = "mg/dL"
+)
+
+plots <- lapply(names(variables), function(var) create_histogram(data, var, variables[[var]]))
+
+combined_plots <- wrap_plots(plots, nrow = 2, ncol = 2)
+
+combined_plots
+```
+
+
+
+
+```{r}
+ethnicity_counts <- table(data$ethnicity)
+percentages <- prop.table(ethnicity_counts) * 100
+
+ethnicity_table <- data.frame(
+  Ethnicity = names(percentages),
+  Percentage = percentages
+)
+
+print(ethnicity_table)
+
 ```
 
 ```{r}
 data <- read.csv("merged_df_NEW.csv")
-RF_impute_df <- fread("RF_imputation_NEW.csv")
-data = subset(data, select = -c(deathtime, survival_time))
 ```
-
 
 
 ```{r}
@@ -43,6 +103,10 @@ print(table1, showAllLevels = TRUE)
 data_clean <- data %>%
   clean_names() %>%
   remove_empty("cols")
+```
+
+
+```{r}
 
 data_filtered <- data_clean %>%
   select_if(~ any(is.na(.)))
@@ -96,74 +160,327 @@ ggplot(missing_data, aes(x = reorder(variable, -missing_count), y = missing_coun
 ```
 
 
-
-
 ```{r}
 library(glmnet)
 library(data.table)
 library(boot)
 
 bootstrap_function <- function(data, indices) {
-  # Resample the data
   boot_x <- x_train[indices, ]
   boot_y <- y_train[indices]
-  
-  # Fit the Elastic Net model
   fit <- glmnet(boot_x, boot_y, family = "binomial", alpha = best_alpha, lambda = best_lambda)
-  
-  # Extract the coefficients
   as.vector(coef(fit, s = best_lambda))
 }
 
-# Perform bootstrap resampling
 set.seed(213)
 boot_results <- boot(data = x_train, statistic = bootstrap_function, R = 1000)
-
-# Extract the coefficients from the bootstrap results
 coef_matrix <- t(boot_results$t)
-
-# Get the variable names for the coefficients
 coef_names <- rownames(coef(glmnet(x_train, y_train, family = "binomial", alpha = best_alpha, lambda = best_lambda)))
-
-# Function to calculate confidence intervals for each coefficient
 get_ci <- function(bootstrap_coefs) {
   apply(bootstrap_coefs, 1, function(coef_values) {
     quantile(coef_values, probs = c(0.025, 0.975))
   })
 }
-
-# Calculate confidence intervals for each coefficient
 ci_matrix <- get_ci(coef_matrix)
-
-# Create a data frame to store the confidence intervals
 ci_df <- data.frame(
   Variable = coef_names,
   Lower_2.5 = ci_matrix[1, ],
   Upper_97.5 = ci_matrix[2, ]
 )
-
 ci_df <- ci_df[ci_df$Variable != "(Intercept)", ]
 print(ci_df)
 ```
 
-```{r}
-library(ggplot2)
+```{r, fig.height=7}
+ci_df$Point_Estimate <- (ci_df$Lower_2.5 + ci_df$Upper_97.5) / 2
+ci_df$Significant <- ifelse(ci_df$Lower_2.5 > 0 | ci_df$Upper_97.5 < 0, "Significant", "Not Significant")
+ci_df <- ci_df[order(ci_df$Point_Estimate), ]
+ci_df$Variable <- factor(ci_df$Variable, levels = ci_df$Variable)
 ggplot(ci_df, aes(x = Variable, ymin = Lower_2.5, ymax = Upper_97.5)) +
-  geom_pointrange(aes(y = (Lower_2.5 + Upper_97.5) / 2), color = "blue") +
+  geom_pointrange(aes(y = Point_Estimate, color = Significant)) +
+  scale_color_manual(values = c("Significant" = "red", "Not Significant" = "blue")) +
   coord_flip() +
   labs(title = "95% Confidence Intervals for Coefficients",
        y = "Coefficient Value",
-       x = "Variable") +
+       x = "Variable",
+       color = "Significance") +
   theme_minimal()
+```
+
+
+```{r}
+
+library(ggplot2)
+library(ggpubr)
+
+create_histogram <- function(data, variable, units) {
+  mean_alive <- mean(data[data$outcome == "0", variable], na.rm = TRUE)
+  mean_dead <- mean(data[data$outcome == "1", variable], na.rm = TRUE)
+  
+  variable_label <- ifelse(variable == "heart.rate", "Heart rate", gsub("\\.", " ", variable))
+  units_label <- ifelse(variable == "PH", "", paste("(", units, ")"))
+  
+  p <- ggplot(data, aes_string(x = variable, fill = "factor(outcome)")) +
+    geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.5, bins = 20) +
+    geom_vline(xintercept = mean_alive, col = "blue", lwd = 1, linetype = "dotted") +
+    geom_vline(xintercept = mean_dead, col = "green", lwd = 1, linetype = "dotted") +
+    scale_fill_manual(values = c("blue", "green"), labels = c("Alive", "Dead")) +
+    labs(title = paste(variable_label, "by Outcome"),
+         x = paste(variable_label, units_label),
+         y = "Density",
+         fill = "Outcome") +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 12),  # Adjust title size without bold
+      axis.title = element_text(size = 10),                 
+      axis.text = element_text(size = 8),                    
+      legend.position = "none"  # Hide the legend in individual plots
+    )
+  
+  return(p)
+}
+
+# List of variables to plot with their units
+variables <- list(
+  "Blood.calcium" = "mEq/L",
+  "Bicarbonate" = "mEq/L",
+  "heart.rate" = "bpm",
+  "Urea.nitrogen" = "mg/dL"
+)
+
+plots <- lapply(names(variables), function(var) create_histogram(data, var, variables[[var]]))
+
+# Combine plots using ggarrange from ggpubr
+combined_plots <- ggarrange(plotlist = plots, nrow = 2, ncol = 2, common.legend = TRUE, legend = "right")
+
+combined_plots
+
 
 ```
-```{r}
-significant_vars <- ci_df[ci_df$Lower_2.5 > 0 | ci_df$Upper_97.5 < 0, ]
-insignificant_vars <- ci_df[ci_df$Lower_2.5 <= 0 & ci_df$Upper_97.5 >= 0, ]
-cat("Significant Variables:\n")
-print(significant_vars)
-cat("Insignificant Variables:\n")
-print(insignificant_vars)
-significant_variable_names <- significant_vars$Variable
+
+
+```{r, warning=FALSE}
+set.seed(123)
+
+# Load the data
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Prepare the dataset by removing unwanted columns
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
+
+# Convert to data.table
+dt <- as.data.table(RF_complete_df)
+
+# Ensure the outcome column exists
+if (!"outcome" %in% names(dt)) {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Define predictor matrix and response variable
+predictor_names <- setdiff(names(dt), "outcome")
+x <- as.matrix(dt[, ..predictor_names])
+y <- dt$outcome
+
+n_bootstrap <- 1000
+significant_counts <- rep(0, length(predictor_names))
+names(significant_counts) <- predictor_names
+set.seed(123)
+
+log_loss <- function(y_true, y_pred) {
+  -mean(y_true * log(y_pred) + (1 - y_true) * log(1 - y_pred))
+}
+
+for (i in 1:n_bootstrap) {
+  boot_idx <- sample(1:nrow(x), replace = TRUE)
+  x_boot <- x[boot_idx, ]
+  y_boot <- y[boot_idx]
+  
+  train_idx <- sample(1:nrow(x_boot), size = 0.8 * nrow(x_boot))
+  x_train <- x_boot[train_idx, ]
+  y_train <- y_boot[train_idx]
+  x_test <- x_boot[-train_idx, ]
+  y_test <- y_boot[-train_idx]
+  cv_fit <- cv.glmnet(x_train, y_train, family = "binomial", alpha = 0.5)
+  best_lambda <- cv_fit$lambda.min
+  enet_model <- glmnet(x_train, y_train, family = "binomial", alpha = 0.5, lambda = best_lambda)
+  
+  # Identify selected variables (non-zero coefficients)
+  selected_vars <- rownames(coef(enet_model))[which(coef(enet_model) != 0)]
+  selected_vars <- setdiff(selected_vars, "(Intercept)")
+  
+  if (length(selected_vars) > 0) {
+    # Refit logistic regression on the test set using selected variables
+    x_test_selected <- as.data.frame(x_test)[, selected_vars, drop = FALSE]
+    refit_model <- glm(y_test ~ ., data = x_test_selected, family = binomial())
+    
+    # Identify significant variables
+    p_values <- summary(refit_model)$coefficients[, "Pr(>|z|)"]
+    significant_vars <- names(p_values)[which(p_values < 0.05)]
+    significant_counts[significant_vars] <- significant_counts[significant_vars] + 1
+  }
+}
+
+# Calculate the percentage of times each variable was significant
+significant_percent <- significant_counts / n_bootstrap * 100
 ```
+
+
+
+```{r}
+top_10_vars <- names(sort(significant_percent, decreasing = TRUE))[1:10]
+plot_data <- data.frame(variable = names(significant_percent), percent_significant = significant_percent)
+plot_data <- plot_data[plot_data$variable %in% top_10_vars, ]
+plot_data <- plot_data[order(plot_data$percent_significant, decreasing = TRUE), ]
+```
+
+```{r}
+unique(plot_data$variable)
+
+```
+
+```{r}
+new_names <- c(
+  Lactic_acid = "Lactic acid",
+  Urea_nitrogen = "Urea nitrogen",
+  Renal_failure = "Renal failure",
+  SP_O2 = "SpO2",
+  heart_rate = "Heart rate",
+  Blood_calcium = "Blood calcium"
+)
+```
+
+```{r}
+ggplot(plot_data, aes(x = reorder(variable, -percent_significant), y = percent_significant)) +
+  geom_bar(stat = "identity", fill = "skyblue", width = 0.6) +
+  labs(x = "Variable", y = "Percentage Significant (%)", 
+       title = "Top 10 Significant Variables in Bootstrap Samples (p < 0.05)") +
+  scale_x_discrete(labels = new_names) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  # Size for x-axis text
+    axis.text.y = element_text(size = 12),  # Size for y-axis text
+    axis.title.x = element_text(size = 14),  # Size for x-axis title
+    axis.title.y = element_text(size = 14),  # Size for y-axis title
+    plot.title = element_text(size = 16, face = "bold")  # Size and style for plot title
+  )
+
+```
+
+
+```{r}
+library(data.table)
+library(glmnet)
+library(ggplot2)
+
+set.seed(123)
+
+# Load the data
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+
+# Prepare the dataset by removing unwanted columns
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
+
+# Convert to data.table
+dt <- as.data.table(RF_complete_df)
+
+# Ensure the outcome column exists
+if (!"outcome" %in% names(dt)) {
+  stop("The 'outcome' column does not exist in the dataframe.")
+}
+
+# Define predictor matrix and response variable
+predictor_names <- setdiff(names(dt), "outcome")
+x <- as.matrix(dt[, ..predictor_names])
+y <- dt$outcome
+
+n_bootstrap <- 1000
+significant_counts <- rep(0, length(predictor_names))
+coefficients_sum <- rep(0, length(predictor_names))
+names(significant_counts) <- predictor_names
+names(coefficients_sum) <- predictor_names
+set.seed(123)
+
+log_loss <- function(y_true, y_pred) {
+  -mean(y_true * log(y_pred) + (1 - y_true) * log(1 - y_pred))
+}
+
+for (i in 1:n_bootstrap) {
+  boot_idx <- sample(1:nrow(x), replace = TRUE)
+  x_boot <- x[boot_idx, ]
+  y_boot <- y[boot_idx]
+  
+  train_idx <- sample(1:nrow(x_boot), size = 0.8 * nrow(x_boot))
+  x_train <- x_boot[train_idx, ]
+  y_train <- y_boot[train_idx]
+  x_test <- x_boot[-train_idx, ]
+  y_test <- y_boot[-train_idx]
+  cv_fit <- cv.glmnet(x_train, y_train, family = "binomial", alpha = 0.5)
+  best_lambda <- cv_fit$lambda.min
+  enet_model <- glmnet(x_train, y_train, family = "binomial", alpha = 0.5, lambda = best_lambda)
+  
+  # Identify selected variables (non-zero coefficients)
+  selected_vars <- rownames(coef(enet_model))[which(coef(enet_model) != 0)]
+  selected_vars <- setdiff(selected_vars, "(Intercept)")
+  
+  if (length(selected_vars) > 0) {
+    # Refit logistic regression on the test set using selected variables
+    x_test_selected <- as.data.frame(x_test)[, selected_vars, drop = FALSE]
+    refit_model <- glm(y_test ~ ., data = x_test_selected, family = binomial())
+    
+    # Identify significant variables
+    p_values <- summary(refit_model)$coefficients[, "Pr(>|z|)"]
+    significant_vars <- names(p_values)[which(p_values < 0.05)]
+    significant_counts[significant_vars] <- significant_counts[significant_vars] + 1
+    
+    # Sum coefficients
+    for (var in significant_vars) {
+      coefficients_sum[var] <- coefficients_sum[var] + coef(refit_model)[var]
+    }
+  }
+}
+
+# Calculate the percentage of times each variable was significant
+significant_percent <- significant_counts / n_bootstrap * 100
+
+# Calculate the average coefficient for each variable
+average_coefficients <- coefficients_sum / significant_counts
+average_coefficients[is.na(average_coefficients)] <- 0
+
+# Extract top 10 significant variables
+top_10_vars <- names(sort(significant_percent, decreasing = TRUE))[1:10]
+
+# Prepare data for plotting
+plot_data <- data.frame(variable = names(significant_percent), percent_significant = significant_percent, average_coefficient = average_coefficients)
+plot_data <- plot_data[plot_data$variable %in% top_10_vars, ]
+plot_data <- plot_data[order(plot_data$percent_significant, decreasing = TRUE), ]
+
+# Define new names for variables
+new_names <- c(
+  Lactic_acid = "Lactic acid",
+  Urea_nitrogen = "Urea nitrogen",
+  Renal_failure = "Renal failure",
+  SP_O2 = "SpO2",
+  heart_rate = "Heart rate",
+  Blood_calcium = "Blood calcium"
+)
+```
+
+
+```{r}
+
+# Plot the data
+ggplot(plot_data, aes(x = reorder(variable, -percent_significant), y = percent_significant, fill = average_coefficient > 0)) +
+  geom_bar(stat = "identity", width = 0.6) +
+  scale_fill_manual(values = c("red", "blue"), name = "Correlation", labels = c("Negative", "Positive")) +
+  labs(x = "Variable", y = "Percentage Significant (%)", 
+       title = "Top 10 Significant Variables in Bootstrap Samples (p < 0.05)") +
+  scale_x_discrete(labels = new_names) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+plot(1, 1, main = expression(hat(P)(Death[i] == 1 ~ "|" ~ bold(X)[i] == bold(x)[i]) == hat(f)(bold(x)[i])))
+```
+
+
 
