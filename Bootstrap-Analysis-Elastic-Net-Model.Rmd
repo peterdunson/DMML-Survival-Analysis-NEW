@@ -1,0 +1,134 @@
+---
+title: "Significance Analysis of Variables in Bootstrap Samples"
+author: 'Ephrata Getachew'
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+# Load necessary libraries
+library(data.table)
+library(glmnet)
+library(ggplot2)
+```
+
+
+```{r}
+# Load the dataset
+RF_impute_df <- fread("RF_imputation_NEW.csv")
+```
+
+
+```{r, warning=FALSE}
+# Prepare the dataset by removing unwanted columns
+RF_complete_df <- subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
+
+# Convert to data.table
+RF_complete_dt <- as.data.table(RF_complete_df)
+```
+
+
+# Bootstrap Analysis for Variable Significance
+
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Define predictor matrix and response variable
+predictor_names <- setdiff(names(RF_complete_dt), "outcome")
+x <- as.matrix(RF_complete_dt[, ..predictor_names])
+y <- RF_complete_dt$outcome
+
+# Number of bootstrap iterations
+n_bootstrap <- 1000
+significant_counts <- rep(0, length(predictor_names))
+names(significant_counts) <- predictor_names
+
+# Log-loss function for evaluation
+log_loss <- function(y_true, y_pred) {
+  -mean(y_true * log(y_pred) + (1 - y_true) * log(1 - y_pred))
+}
+
+for (i in 1:n_bootstrap) {
+  # Bootstrap sampling
+  boot_idx <- sample(1:nrow(x), replace = TRUE)
+  x_boot <- x[boot_idx, ]
+  y_boot <- y[boot_idx]
+  
+  # Split data into training and test sets
+  train_idx <- sample(1:nrow(x_boot), size = 0.8 * nrow(x_boot))
+  x_train <- x_boot[train_idx, ]
+  y_train <- y_boot[train_idx]
+  x_test <- x_boot[-train_idx, ]
+  y_test <- y_boot[-train_idx]
+  
+  # Fit elastic net model with cross-validation
+  cv_fit <- cv.glmnet(x_train, y_train, family = "binomial", alpha = 0.5)
+  best_lambda <- cv_fit$lambda.min
+  enet_model <- glmnet(x_train, y_train, family = "binomial", alpha = 0.5, lambda = best_lambda)
+  
+  # Identify selected variables (non-zero coefficients)
+  selected_vars <- rownames(coef(enet_model))[which(coef(enet_model) != 0)]
+  selected_vars <- setdiff(selected_vars, "(Intercept)")
+  
+  if (length(selected_vars) > 0) {
+    # Refit logistic regression on the test set using selected variables
+    x_test_selected <- as.data.frame(x_test)[, selected_vars, drop = FALSE]
+    refit_model <- glm(y_test ~ ., data = x_test_selected, family = binomial())
+    
+    # Identify significant variables
+    p_values <- summary(refit_model)$coefficients[, "Pr(>|z|)"]
+    significant_vars <- names(p_values)[which(p_values < 0.05)]
+    significant_counts[significant_vars] <- significant_counts[significant_vars] + 1
+  }
+}
+
+# Calculate the percentage of times each variable was significant
+significant_percent <- significant_counts / n_bootstrap * 100
+```
+
+
+# Top 10 Significant Variables
+
+```{r}
+# Identify the top 10 significant variables
+top_10_vars <- names(sort(significant_percent, decreasing = TRUE))[1:10]
+
+# Prepare data for plotting
+plot_data <- data.frame(variable = names(significant_percent), percent_significant = significant_percent)
+plot_data <- plot_data[plot_data$variable %in% top_10_vars, ]
+plot_data <- plot_data[order(plot_data$percent_significant, decreasing = TRUE), ]
+```
+
+
+```{r}
+# Rename variables for clearer plotting
+new_names <- c(
+  Lactic_acid = "Lactic acid",
+  Urea_nitrogen = "Urea nitrogen",
+  Renal_failure = "Renal failure",
+  SP_O2 = "SpO2",
+  heart_rate = "Heart rate",
+  Blood_calcium = "Blood calcium"
+)
+```
+
+
+```{r}
+# Plot the top 10 significant variables
+ggplot(plot_data, aes(x = reorder(variable, -percent_significant), y = percent_significant)) +
+  geom_bar(stat = "identity", fill = "skyblue", width = 0.6) +
+  labs(x = "Variable", y = "Percentage Significant (%)", 
+       title = "Top 10 Significant Variables in Bootstrap Samples (p < 0.05)") +
+  scale_x_discrete(labels = new_names) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  
+    axis.text.y = element_text(size = 12),  
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    plot.title = element_text(size = 16, face = "bold") 
+  )
+```
