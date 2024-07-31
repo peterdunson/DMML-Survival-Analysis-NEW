@@ -83,8 +83,287 @@ print(ethnicity_table)
 
 ```
 
+
+```{r}
+# Assuming you have already created ethnicity_table as described
+ethnicity_counts <- table(data$ethnicity)
+percentages <- prop.table(ethnicity_counts) * 100
+
+ethnicity_table <- data.frame(
+  Ethnicity = names(percentages),
+  Percentage = percentages
+)
+
+print(ethnicity_table)
+
+# Load ggplot2
+library(ggplot2)
+
+# Create the bar plot
+ggplot(ethnicity_table, aes(x = Ethnicity, y = Percentage, fill = Ethnicity)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Percentage of Each Ethnicity",
+       x = "Ethnicity",
+       y = "Percentage") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+ˆ
 ```{r}
 data <- read.csv("merged_df_NEW.csv")
+```
+
+```{r}
+# Create the data frame with ethnicity counts and percentages
+ethnicity_counts <- table(data$ethnicity)
+percentages <- prop.table(ethnicity_counts) * 100
+
+ethnicity_table <- data.frame(
+  Ethnicity = names(percentages),
+  Percentage = as.vector(percentages)
+)
+
+print(ethnicity_table)
+
+# Load ggplot2
+library(ggplot2)
+
+# Create the bar plot
+ggplot(ethnicity_table, aes(x = Ethnicity, y = Percentage, fill = Ethnicity)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Percentage of Each Ethnicity",
+       x = "Ethnicity",
+       y = "Percentage") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+```{r}
+# Load necessary library
+library(ggplot2)
+library(dplyr)
+
+# Assuming data is your original dataframe
+# Create a mapping of subgroups to main categories
+ethnicity_mapping <- c(
+  "AMERICAN INDIAN/ALASKA NATIVE" = "American Indian/Alaska Native",
+  "ASIAN" = "Asian",
+  "ASIAN - ASIAN INDIAN" = "Asian",
+  "ASIAN - CAMBODIAN" = "Asian",
+  "ASIAN - CHINESE" = "Asian",
+  "ASIAN - FILIPINO" = "Asian",
+  "ASIAN - VIETNAMESE" = "Asian",
+  "BLACK/AFRICAN" = "Black/African",
+  "BLACK/AFRICAN AMERICAN" = "Black/African",
+  "BLACK/CAPE VERDEAN" = "Black/African",
+  "BLACK/HAITIAN" = "Black/African",
+  "HISPANIC OR LATINO" = "Hispanic/Latino",
+  "HISPANIC/LATINO - PUERTO RICAN" = "Hispanic/Latino",
+  "MIDDLE EASTERN" = "Middle Eastern",
+  "MULTI RACE ETHNICITY" = "Multi Race",
+  "OTHER" = "Other",
+  "PATIENT DECLINED TO ANSWER" = "Other",
+  "PORTUGUESE" = "Other",
+  "UNABLE TO OBTAIN" = "Other",
+  "UNKNOWN/NOT SPECIFIED" = "Other",
+  "WHITE" = "White",
+  "WHITE - OTHER EUROPEAN" = "White",
+  "WHITE - RUSSIAN" = "White"
+)
+
+# Recode the ethnicity column
+data$main_ethnicity <- ethnicity_mapping[data$ethnicity]
+
+# Summarize the data by main categories
+ethnicity_counts <- table(data$main_ethnicity)
+percentages <- prop.table(ethnicity_counts) * 100
+
+ethnicity_table <- data.frame(
+  Ethnicity = names(percentages),
+  Percentage = as.vector(percentages)
+)
+
+print(ethnicity_table)
+```
+
+
+```{r, fig.height=7}
+
+# Create the bar plot
+ggplot(ethnicity_table, aes(x = Ethnicity, y = Percentage, fill = Ethnicity)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Percentage of Each Ethnicity",
+       x = "Ethnicity",
+       y = "Percentage") +
+theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 60, hjust = 1, size = 12),  
+    axis.text.y = element_text(size = 12),  
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    plot.title = element_text(size = 16, face = "bold") 
+  )
+
+```
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Assuming data is your original dataframe
+# Create a mapping of subgroups to main categories
+ethnicity_mapping <- c(
+  "AMERICAN INDIAN/ALASKA NATIVE" = "American Indian/Alaska Native",
+  "ASIAN" = "Asian",
+  "ASIAN - ASIAN INDIAN" = "Asian",
+  "ASIAN - CAMBODIAN" = "Asian",
+  "ASIAN - CHINESE" = "Asian",
+  "ASIAN - FILIPINO" = "Asian",
+  "ASIAN - VIETNAMESE" = "Asian",
+  "BLACK/AFRICAN" = "Black/African",
+  "BLACK/AFRICAN AMERICAN" = "Black/African",
+  "BLACK/CAPE VERDEAN" = "Black/African",
+  "BLACK/HAITIAN" = "Black/African",
+  "HISPANIC OR LATINO" = "Hispanic/Latino",
+  "HISPANIC/LATINO - PUERTO RICAN" = "Hispanic/Latino",
+  "MIDDLE EASTERN" = "Middle Eastern",
+  "MULTI RACE ETHNICITY" = "Multi Race",
+  "OTHER" = "Other",
+  "PATIENT DECLINED TO ANSWER" = "Other",
+  "PORTUGUESE" = "Other",
+  "UNABLE TO OBTAIN" = "Other",
+  "UNKNOWN/NOT SPECIFIED" = "Other",
+  "WHITE" = "White",
+  "WHITE - OTHER EUROPEAN" = "White",
+  "WHITE - RUSSIAN" = "White"
+)
+
+# Recode the ethnicity column
+data$main_ethnicity <- ethnicity_mapping[data$ethnicity]
+
+# Summarize the data by main categories
+ethnicity_counts <- table(data$main_ethnicity)
+percentages <- prop.table(ethnicity_counts) * 100
+
+ethnicity_table <- data.frame(
+  Ethnicity = names(percentages),
+  Percentage = as.vector(percentages)
+)
+
+print(ethnicity_table)
+```
+
+```{r, fig.height=7}
+
+ethnicity_table <- ethnicity_table %>%
+  arrange(desc(Percentage))
+
+
+
+# Reorder the factor levels of Ethnicity
+ethnicity_table$Ethnicity <- factor(ethnicity_table$Ethnicity, levels = ethnicity_table$Ethnicity)
+
+
+
+# Create the bar plot with percentage labels
+ggplot(ethnicity_table, aes(x = Ethnicity, y = Percentage, fill = Ethnicity)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            vjust = -0.3, size = 3.5) +
+  labs(title = "Percentage of Each Ethnicity",
+       x = "Ethnicity",
+       y = "Percentage") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 60, hjust = 1, size = 12),  
+    axis.text.y = element_text(size = 12),  
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    plot.title = element_text(size = 16, face = "bold") 
+  )
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Summarize the data by gender
+gender_counts <- table(data$gender)
+percentages <- prop.table(gender_counts) * 100
+
+gender_table <- data.frame(
+  Gender = names(percentages),
+  Percentage = as.vector(percentages)
+)
+
+# Sort the data frame by Percentage in decreasing order
+gender_table <- gender_table %>%
+  arrange(desc(Percentage))
+
+
+# Reorder the factor levels of Gender
+gender_table$Gender <- factor(gender_table$Gender, levels = gender_table$Gender)
+
+# Create the bar plot with percentage labels
+ggplot(gender_table, aes(x = Gender, y = Percentage, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            vjust = -0.3, size = 3.5) +
+  theme_minimal() +
+  labs(title = "Percentage of Each Gender",
+       x = "Gender",
+       y = "Percentage") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+
+# Assuming data is your original dataframe with an 'age' column
+# Bin the ages into groups
+data$age_group <- cut(data$age, 
+                      breaks = seq(0, 100, by = 10), 
+                      right = FALSE, 
+                      labels = c("0-9", "10-19", "20-29", "30-39", "40-49", 
+                                 "50-59", "60-69", "70-79", "80-89", "90-99"))
+
+# Summarize the data by age group
+age_group_counts <- table(data$age_group)
+percentages <- prop.table(age_group_counts) * 100
+
+age_group_table <- data.frame(
+  AgeGroup = names(percentages),
+  Percentage = as.vector(percentages)
+)
+
+# Sort the data frame by Percentage in decreasing order
+age_group_table <- age_group_table %>%
+  arrange(desc(Percentage))
+
+print(age_group_table)
+
+# Reorder the factor levels of AgeGroup
+age_group_table$AgeGroup <- factor(age_group_table$AgeGroup, levels = age_group_table$AgeGroup)
+
+# Create the bar plot with percentage labels
+ggplot(age_group_table, aes(x = AgeGroup, y = Percentage, fill = AgeGroup)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            vjust = -0.3, size = 3.5) +
+  theme_minimal() +
+  labs(title = "Percentage of Each Age Group",
+       x = "Age Group",
+       y = "Percentage") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
 ```
 
 
@@ -355,12 +634,13 @@ ggplot(plot_data, aes(x = reorder(variable, -percent_significant), y = percent_s
   labs(x = "Variable", y = "Percentage Significant (%)", 
        title = "Top 10 Significant Variables in Bootstrap Samples (p < 0.05)") +
   scale_x_discrete(labels = new_names) +
+  theme_classic() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  # Size for x-axis text
-    axis.text.y = element_text(size = 12),  # Size for y-axis text
-    axis.title.x = element_text(size = 14),  # Size for x-axis title
-    axis.title.y = element_text(size = 14),  # Size for y-axis title
-    plot.title = element_text(size = 16, face = "bold")  # Size and style for plot title
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  
+    axis.text.y = element_text(size = 12),  
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    plot.title = element_text(size = 16, face = "bold") 
   )
 
 ```

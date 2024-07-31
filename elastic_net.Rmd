@@ -12,39 +12,6 @@ library(data.table)
 
 
 
-```{r}
-RF_impute_df <- fread("RF_imputation_NEW.csv")
-
-RF_complete_df = subset(RF_impute_df, select = -c(deathtime, survival_time, LOS, Unnamed_0, V1, admittime, ID, group, tLOS, Anion_gap, subject_id))
-
-
-
-#Elastic Net
-
-x <- as.matrix(RF_complete_df)  
-y <- RF_impute_df$outcome
-
-
-set.seed(510)  
-cv_fit <- cv.glmnet(x, y, family = "binomial", alpha = 0.5) #alpha = mix between lasso and ridge, with higher values being more lasso.
-
-
-best_lambda_enet <- cv_fit$lambda.min
-cat("Best lambda:", best_lambda_enet, "\n")
-
-
-final_model <- glmnet(x, y, family = "binomial", alpha = .5, lambda = best_lambda_enet)
-
-
-coefficients <- coef(final_model)
-print(coefficients)
-
-selected_covariates <- rownames(coefficients)[which(coefficients != 0)]
-cat("Selected covariates:", selected_covariates, "\n")
-
-```
-
-
 
 
 

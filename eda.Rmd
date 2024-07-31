@@ -1,0 +1,302 @@
+---
+title: "Exploratory Data Analysis of ICU Patient Dataset"
+output: html_document
+date: "2024-07-31"
+---
+
+```{r setup, include=FALSE}
+# Load necessary libraries
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+library(janitor)
+```
+
+
+```{r}
+# Load the dataset
+merged_df <- read.csv("merged_df_NEW.csv")
+```
+
+# Data Cleaning
+
+```{r}
+# Clean the column names and remove empty columns.
+merged_df_clean <- merged_df %>%
+  clean_names() %>%
+  remove_empty("cols")
+
+merged_df_clean = subset(merged_df_clean, select = -c(deathtime, survival_time, admittime, group, subject_id))
+```
+
+
+# Missing Data Analysis
+
+```{r, fig.width 10}
+# Filter the dataframe to include only columns with missing values.
+merged_df_filtered <- merged_df_clean %>%
+  select_if(~ any(is.na(.)))
+
+# Summarize the missing data for each column.
+missing_data <- merged_df_filtered %>%
+  summarise_all(~sum(is.na(.))) %>%
+  gather(key = "variable", value = "missing_count") %>%
+  mutate(
+    total_count = nrow(merged_df_filtered),
+    missing_percent = (missing_count / total_count) * 100
+  )
+
+# Create a vector with more readable variable names.
+new_names <- c(
+  pco2 = "PCO2",
+  ph = "pH",
+  basophils = "Basophils",
+  lactic_acid = "Lactic Acid",
+  bmi = "BMI",
+  creatine_kinase = "Creatine Kinase",
+  los = "LOS",
+  lymphocyte = "Lymphocyte",
+  neutrophils = "Neutrophils",
+  language = "Language",
+  urine_output = "Urine Output",
+  marital_status = "Marital Status",
+  pt = "PT",
+  inr = "INR",
+  temperature = "Temperature",
+  glucose = "Glucose",
+  systolic_blood_pressure = "Systolic Blood Pressure",
+  diastolic_blood_pressure = "Diastolic Blood Pressure",
+  sp_o2 = "SpO2",
+  respiratory_rate = "Respiratory Rate",
+  heart_rate = "Heart Rate",
+  blood_calcium = "Blood Calcium"
+)
+
+# Plot the missing data overview with bar plot.
+ggplot(missing_data, aes(x = reorder(variable, -missing_count), y = missing_count)) +
+  geom_bar(stat = "identity", fill = "steelblue", width = 0.8) + 
+  geom_text(aes(label = paste0(round(missing_percent, 1), "%")), 
+            vjust = -0.5, 
+            color = "black",
+            size = 3, # Adjust size to minimize text
+            nudge_y = 5) +
+  labs(
+    title = "Missing Data Overview",
+    x = "Variables",
+    y = "Number of Missing Values"
+  ) +
+  scale_x_discrete(labels = new_names) + # Apply the new names
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+# Data Visualization
+
+
+```{r}
+# Define a function to create histograms for specified variables and their units.
+create_histogram <- function(merged_df, variable, units) {
+  mean_alive <- mean(merged_df[merged_df$outcome == "0", variable], na.rm = TRUE)
+  mean_dead <- mean(merged_df[merged_df$outcome == "1", variable], na.rm = TRUE)
+  
+  p <- ggplot(merged_df, aes_string(x = variable, fill = "factor(outcome)")) +
+    geom_histogram(aes(y = ..density..), position = "identity", alpha = 0.5, bins = 20) +
+    geom_vline(xintercept = mean_alive, col = "blue", lwd = 1, linetype = "dotted") +
+    geom_vline(xintercept = mean_dead, col = "green", lwd = 1, linetype = "dotted") +
+    scale_fill_manual(values = c("blue", "green"), labels = c("Alive", "Dead")) +
+    labs(title = paste("", gsub("\\.", " ", variable), "by Outcome"),
+         x = paste(gsub("\\.", " ", variable), ifelse(variable == "PH", "", paste("(", units, ")"))),
+         y = "Density",
+         fill = "Outcome") +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(size = 12, face = "bold"),  
+      axis.title = element_text(size = 10),                 
+      axis.text = element_text(size = 8)                    
+    )
+  
+  return(p)
+}
+
+# Create a list of variables and their units for the histogram creation.
+variables <- list(
+  "Blood.calcium" = "mEq/L",
+  "Bicarbonate" = "mg/dL",
+  "PH" = "hydrogen ion concentration",
+  "Urea.nitrogen" = "mg/dL"
+)
+
+# Apply the create_histogram function to each variable and combine the plots.
+plots <- lapply(names(variables), function(var) create_histogram(merged_df, var, variables[[var]]))
+combined_plots <- wrap_plots(plots, nrow = 2, ncol = 2)
+combined_plots
+```
+## Descriptive Statistics by Outcome
+
+```{r}
+# Define variables
+vars <- c("age", "gendera")
+
+# Convert gendera to a factor
+merged_df$gendera <- factor(merged_df$gendera, levels = c(1, 2), labels = c("Male", "Female"))
+
+# Create and print Table 1
+table1 <- CreateTableOne(vars = vars, strata = "outcome", data = merged_df)
+print(table1, showAllLevels = TRUE)
+```
+
+# Data Transformation
+
+## Create Age Groups
+
+```{r}
+# Create a new column for age groups based on age ranges.
+merged_df$age_group <- cut(merged_df$age, 
+                      breaks = seq(0, 100, by = 10), 
+                      right = FALSE, 
+                      labels = c("0-9", "10-19", "20-29", "30-39", "40-49", 
+                                 "50-59", "60-69", "70-79", "80-89", "90-99"))
+```
+
+## Recode Ethnicity
+
+```{r}
+# Create a mapping for ethnicity recoding.
+ethnicity_mapping <- c(
+  "AMERICAN INDIAN/ALASKA NATIVE" = "American Indian/Alaska Native",
+  "ASIAN" = "Asian",
+  "ASIAN - ASIAN INDIAN" = "Asian",
+  "ASIAN - CAMBODIAN" = "Asian",
+  "ASIAN - CHINESE" = "Asian",
+  "ASIAN - FILIPINO" = "Asian",
+  "ASIAN - VIETNAMESE" = "Asian",
+  "BLACK/AFRICAN" = "Black/African",
+  "BLACK/AFRICAN AMERICAN" = "Black/African",
+  "BLACK/CAPE VERDEAN" = "Black/African",
+  "BLACK/HAITIAN" = "Black/African",
+  "HISPANIC OR LATINO" = "Hispanic/Latino",
+  "HISPANIC/LATINO - PUERTO RICAN" = "Hispanic/Latino",
+  "MIDDLE EASTERN" = "Middle Eastern",
+  "MULTI RACE ETHNICITY" = "Multi Race",
+  "OTHER" = "Other",
+  "PATIENT DECLINED TO ANSWER" = "Other",
+  "PORTUGUESE" = "Other",
+  "UNABLE TO OBTAIN" = "Other",
+  "UNKNOWN/NOT SPECIFIED" = "Other",
+  "WHITE" = "White",
+  "WHITE - OTHER EUROPEAN" = "White",
+  "WHITE - RUSSIAN" = "White"
+)
+
+# Recode the ethnicity column based on the mapping.
+merged_df$main_ethnicity <- ethnicity_mapping[merged_df$ethnicity]
+```
+
+
+# Data Summarization
+
+## Summarize by Ethnicity
+
+```{r, fig.height=7}
+# Calculate the counts and percentages for each ethnicity.
+ethnicity_counts <- table(merged_df$main_ethnicity)
+percentages <- prop.table(ethnicity_counts) * 100
+
+# Create a dataframe with ethnicity and their corresponding percentages.
+ethnicity_table <- data.frame(
+  Ethnicity = names(percentages),
+  Percentage = as.vector(percentages)
+)
+
+# Arrange the dataframe by percentage in descending order.
+ethnicity_table <- ethnicity_table %>%
+  arrange(desc(Percentage))
+
+# Reorder the factor levels of Ethnicity.
+ethnicity_table$Ethnicity <- factor(ethnicity_table$Ethnicity, levels = ethnicity_table$Ethnicity)
+
+# Create the bar plot with percentage labels for each ethnicity.
+ggplot(ethnicity_table, aes(x = Ethnicity, y = Percentage, fill = Ethnicity)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            vjust = -0.3, size = 3.5) +
+  labs(title = "Percentage of Each Ethnicity",
+       x = "Ethnicity",
+       y = "Percentage") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 60, hjust = 1, size = 12),  
+    axis.text.y = element_text(size = 12),  
+    axis.title.x = element_text(size = 14),  
+    axis.title.y = element_text(size = 14),  
+    plot.title = element_text(size = 16, face = "bold") 
+  )
+```
+
+## Summarize by Gender
+
+```{r}
+# Calculate the counts and percentages for each gender.
+gender_counts <- table(merged_df$gender)
+percentages <- prop.table(gender_counts) * 100
+
+# Create a dataframe with gender and their corresponding percentages.
+gender_table <- data.frame(
+  Gender = names(percentages),
+  Percentage = as.vector(percentages)
+)
+
+# Arrange the dataframe by percentage in descending order.
+gender_table <- gender_table %>%
+  arrange(desc(Percentage))
+
+# Reorder the factor levels of Gender.
+gender_table$Gender <- factor(gender_table$Gender, levels = gender_table$Gender)
+
+# Create the bar plot with percentage labels for each gender.
+ggplot(gender_table, aes(x = Gender, y = Percentage, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            vjust = -0.3, size = 3.5) +
+  theme_minimal() +
+  labs(title = "Percentage of Each Gender",
+       x = "Gender",
+       y = "Percentage") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+## Summarize by Age Group
+
+```{r}
+# Calculate the counts and percentages for each age group.
+age_group_counts <- table(merged_df$age_group)
+percentages <- prop.table(age_group_counts) * 100
+
+# Create a dataframe with age group and their corresponding percentages.
+age_group_table <- data.frame(
+  AgeGroup = names(percentages),
+  Percentage = as.vector(percentages)
+)
+
+# Arrange the dataframe by percentage in descending order.
+age_group_table <- age_group_table %>%
+  arrange(desc(Percentage))
+
+# Reorder the factor levels of AgeGroup.
+age_group_table$AgeGroup <- factor(age_group_table$AgeGroup, levels = age_group_table$AgeGroup)
+
+# Create the bar plot with percentage labels for each age group.
+ggplot(age_group_table, aes(x = AgeGroup, y = Percentage, fill = AgeGroup)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = sprintf("%.1f%%", Percentage)), 
+            vjust = -0.3, size = 3.5) +
+  theme_minimal() +
+  labs(title = "Percentage of Each Age Group",
+       x = "Age Group",
+       y = "Percentage") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
