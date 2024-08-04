@@ -1,0 +1,174 @@
+---
+title: "bpr_NEW"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+parallel:
+```{r}
+# Load necessary libraries
+library(data.table)
+library(dplyr)
+library(PReMiuM)
+library(parallel)
+
+# Set precision for numeric output
+options(digits = 2)
+
+# Load the dataset using fread
+data_bpr <- fread("RF_imputation_NEW.csv")
+
+# Preprocess the data by removing unwanted columns
+data_bpr <- data_bpr %>%
+  select(-deathtime, -survival_time, -LOS, -Unnamed_0, -V1, -admittime, -ID, -group, -tLOS, -subject_id)
+
+# Define the covariates and outcome
+covariates <- setdiff(colnames(data_bpr), "outcome")
+
+# Create a new data frame to ensure the outcome is correctly handled
+data_premium <- data_bpr %>%
+  select(all_of(c(covariates, "outcome")))
+
+# Ensure data_premium is a data frame
+data_premium <- as.data.frame(data_premium)
+
+# Define the function to run profile regression
+run_profile_regression <- function(seed) {
+  result <- profRegr(
+    yModel = "Bernoulli",
+    xModel = "Discrete",
+    nSweeps = 2000,
+    nBurn = 500,
+    data = data_premium,
+    output = paste0("output_seed_", seed),
+    covNames = covariates,
+    outcome = "outcome",  # Specify the outcome column name as a string
+    nClusInit = 30,
+    seed = seed
+  )
+  
+  # Post-process the output to get the clusters
+  dissimObj <- calcDissimilarityMatrix(result)
+  clusObj <- calcOptimalClustering(dissimObj)
+  riskProfileObj <- calcAvgRiskAndProfile(clusObj)
+  
+  list(
+    result = result,
+    dissimObj = dissimObj,
+    clusObj = clusObj,
+    riskProfileObj = riskProfileObj
+  )
+}
+
+# Set the number of cores for parallel processing
+num_cores <- 6
+
+# Define different seeds for sensitivity analysis
+seeds <- c(345978, 123456, 654321)
+
+# Run the profile regression in parallel
+results <- mclapply(seeds, run_profile_regression, mc.cores = num_cores)
+
+# Print the results of the profile regression
+print(results)
+
+# Define a function to plot risk profiles in subsets of covariates
+plot_risk_profiles_in_subsets <- function(riskProfileObj, covariates, subset_size = 15) {
+  num_covariates <- length(covariates)
+  num_subsets <- ceiling(num_covariates / subset_size)
+  
+  for (i in 1:num_subsets) {
+    start_index <- (i - 1) * subset_size + 1
+    end_index <- min(i * subset_size, num_covariates)
+    subset_covariates <- covariates[start_index:end_index]
+    
+    plotRiskProfile(riskProfileObj, whichCovariates = subset_covariates, outFile = paste0("RiskProfileSubset_", i, ".pdf"))
+  }
+}
+
+# Plot and summarize the risk profiles for each result
+for (res in results) {
+  plot_risk_profiles_in_subsets(res$riskProfileObj, covariates)
+  summary(res$riskProfileObj)
+}
+
+
+
+```
+
+
+
+
+non parallel
+```{r}
+# Load necessary libraries
+library(data.table)
+library(dplyr)
+library(PReMiuM)
+
+# Load the dataset using fread
+data_bpr <- fread("RF_imputation_NEW.csv")
+
+# Preprocess the data by removing unwanted columns
+data_bpr <- data_bpr %>%
+  select(-deathtime, -survival_time, -LOS, -Unnamed_0, -V1, -admittime, -ID, -group, -tLOS, -subject_id)
+
+# Define the covariates and outcome
+covariates <- setdiff(colnames(data_bpr), "outcome")
+
+# Create a new data frame to ensure the outcome is correctly handled
+data_premium <- data_bpr %>%
+  select(all_of(c(covariates, "outcome")))
+
+# Ensure data_premium is a data frame
+data_premium <- as.data.frame(data_premium)
+
+# Run profile regression
+result <- profRegr(
+  yModel = "Bernoulli",
+  xModel = "Discrete",
+  nSweeps = 2000,
+  nBurn = 500,
+  data = data_premium,
+  output = "output",
+  covNames = covariates,
+  outcome = "outcome",  # Specify the outcome column name as a string
+  nClusInit = 30, 
+  seed = 345978
+)
+
+# Print the result of the profile regression
+print(result)
+
+# Post-process the output to get the clusters
+dissimObj <- calcDissimilarityMatrix(result)
+clusObj <- calcOptimalClustering(dissimObj)
+riskProfileObj <- calcAvgRiskAndProfile(clusObj)
+
+# Function to plot risk profiles in subsets of covariates
+plot_risk_profiles_in_subsets <- function(riskProfileObj, covariates, subset_size = 15) {
+  num_covariates <- length(covariates)
+  num_subsets <- ceiling(num_covariates / subset_size)
+  
+  for (i in 1:num_subsets) {
+    start_index <- (i - 1) * subset_size + 1
+    end_index <- min(i * subset_size, num_covariates)
+    subset_covariates <- covariates[start_index:end_index]
+    
+    plotRiskProfile(riskProfileObj, whichCovariates = subset_covariates, outFile = paste0("RiskProfileSubset_", i, ".pdf"))
+  }
+}
+
+# Plot and summarize the risk profiles
+plot_risk_profiles_in_subsets(riskProfileObj, covariates)
+summary(riskProfileObj)
+
+```
+
+
+
+
+
+

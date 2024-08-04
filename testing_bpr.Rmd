@@ -1,0 +1,553 @@
+---
+title: "testing_bpr"
+author: "Peter"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+clustering based on relevant covariates, fitting regression with all
+```{r}
+# Load necessary libraries
+library(data.table)
+library(dplyr)
+library(PReMiuM)
+
+# Set R options to reduce memory usage
+options(digits = 2)  # Limit the number of digits printed by R
+
+# Increase the maximum vector size to 64 GB
+mem.maxVSize(65556)  
+
+# Verify the change
+print(mem.maxVSize())  # Should show 68719476736 (64 GB in bytes)
+
+# Load the dataset using fread
+print("Loading dataset...")
+data_bpr <- fread("RF_imputation_NEW.csv")
+
+# Preprocess the data by removing unwanted columns
+print("Preprocessing data...")
+data_bpr <- data_bpr %>%
+  select(-deathtime, -survival_time, -LOS, -Unnamed_0, -V1, -admittime, -ID, -group, -tLOS, -subject_id)
+
+# Define the selected features and outcome
+selected_features <- c("PCO2", "Bicarbonate", "heart_rate", "Blood_calcium", "Leucocyte",
+                       "Urea_nitrogen", "Renal_failure", "Diastolic_blood_pressure", "Lactic_acid",
+                       "Anion_gap", "Urine_output", "SP_O2", "INR", "temperature", "RDW", 
+                       "COPD", "comorb_score", "deficiencyanemias", "Respiratory_rate", "Blood_potassium")
+
+# Create a new data frame to ensure the outcome is correctly handled
+data_premium <- data_bpr %>%
+  select(all_of(c(selected_features, "outcome")))
+
+# Ensure data_premium is a data frame
+data_premium <- as.data.frame(data_premium)
+
+# Run profile regression with increased parameters
+print("Running profile regression...")
+result <- profRegr(
+  yModel = "Bernoulli",
+  xModel = "Normal",
+  nSweeps = 1000,  # Increased sweeps
+  nBurn = 250,  # Increased burn-in
+  data = data_premium,
+  output = "output",
+  covNames = selected_features,  # Use selected features for clustering
+  outcome = "outcome",  # Specify the outcome column name as a string
+  nClusInit = 8,  # Increase the initial number of clusters
+  seed = 523,
+  excludeY = FALSE,  # Include individual-level results
+  reportBurnIn = FALSE,  # Exclude burn-in results from the output
+  nFilter = 10
+)
+
+# Print the result of the profile regression
+print("Profile regression completed")
+print(result)
+
+# Post-process the output to get the clusters
+print("Calculating dissimilarity matrix...")
+dissimObj <- calcDissimilarityMatrix(result)
+
+print("Calculating optimal clustering...")
+clusObj <- calcOptimalClustering(dissimObj, maxNClusters = 20)  
+
+print("Calculating average risk and profile...")
+riskProfileObj <- calcAvgRiskAndProfile(clusObj)
+
+# Verify if risk values are calculated
+if (is.null(riskProfileObj$risk)) {
+  print("No risk values calculated. Check model and clustering.")
+} else {
+  print("Risk values present.")
+}
+
+# Summarize the risk profiles
+print("Summarizing risk profiles...")
+summary_obj <- summary(riskProfileObj)
+print(summary_obj)
+
+print("Risk profile plotting and summary completed.")
+
+```
+
+
+
+
+```{r}
+print(summary_obj)
+table(clusObj$clustering)
+
+# Plot cluster sizes
+# cluster_sizes <- table(clusObj$clustering)
+# barplot(cluster_sizes, main="Cluster Sizes", xlab="Cluster", ylab="Number of Patients")
+```
+
+
+
+
+```{r}
+# Cluster sizes
+cluster_sizes <- c(307, 324, 49, 111, 102, 94, 112, 78)
+cluster_numbers <- 1:8
+
+# Create a data frame for plotting
+cluster_data <- data.frame(
+  cluster = factor(cluster_numbers),
+  size = cluster_sizes
+)
+
+# Plotting the cluster sizes
+library(ggplot2)
+ggplot(cluster_data, aes(x = cluster, y = size, fill = cluster)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Cluster Sizes", x = "Cluster", y = "Number of Patients") +
+  theme(legend.position = "none")
+
+```
+
+
+risk
+```{r}
+# Extract risk values and clustering information
+risks <- riskProfileObj$risk
+cluster_assignments <- clusObj$clustering
+
+# Ensure risks are in the correct format
+risks <- as.vector(risks)
+
+# Calculate the mean risk for each cluster
+mean_risk_by_cluster <- sapply(unique(cluster_assignments), function(cluster) {
+  mean(risks[cluster_assignments == cluster])
+})
+
+# Create a data frame to store the results
+cluster_risk_summary <- data.frame(
+  Cluster = unique(cluster_assignments),
+  MeanRisk = mean_risk_by_cluster
+)
+
+print("Mean risk values by cluster:")
+print(cluster_risk_summary)
+
+# Visualize the mean risk values by cluster
+library(ggplot2)
+
+ggplot(cluster_risk_summary, aes(x = Cluster, y = MeanRisk)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Mean Risk Values by Cluster", x = "Cluster", y = "Mean Risk")
+
+```
+
+
+
+
+
+
+differences of features in clusters
+```{r}
+# Load necessary libraries
+library(data.table)
+library(dplyr)
+
+# Load the dataset using fread
+data_bpr <- fread("RF_imputation_NEW.csv")
+
+# Preprocess the data by removing unwanted columns
+data_bpr <- data_bpr %>%
+  select(-deathtime, -survival_time, -LOS, -Unnamed_0, -V1, -admittime, -ID, -group, -tLOS, -subject_id)
+
+# Calculate the averages of all features across the dataset
+overall_means <- data_bpr %>%
+  summarise(across(everything(), mean, na.rm = TRUE))
+
+# Print the averages
+print("Averages of all features across the dataset:")
+for (col in colnames(overall_means)) {
+  cat(paste(col, ":", overall_means[[col]], "\n"))
+}
+
+```
+
+
+```{r}
+cluster_data <- data.frame(
+  cluster = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4", "Cluster 5", "Cluster 6", "Cluster 7", "Cluster 8"),
+  size = c(307, 324, 49, 111, 102, 94, 112, 78),
+  outcome_mean = c(0.029, 0.068, 0.286, 0.144, 0.049, 0.404, 0.0089, 0.692)
+)
+
+cluster_data$deaths <- cluster_data$outcome_mean * cluster_data$size
+cluster_data$percentage <- cluster_data$outcome_mean * 100
+
+cluster_data$deaths
+cluster_data$percentage
+
+```
+
+
+
+```{r}
+# Calculate mean values for each cluster
+calculate_cluster_means <- function(cluster_number, data, cluster_assignments) {
+  cluster_data <- data[cluster_assignments == cluster_number, ]
+  cluster_means <- colMeans(cluster_data, na.rm = TRUE)
+  return(cluster_means)
+}
+
+# Assuming `data_premium` is your data and `clusObj$clustering` contains cluster assignments
+cluster_1_means <- calculate_cluster_means(1, data_premium, clusObj$clustering)
+cluster_2_means <- calculate_cluster_means(2, data_premium, clusObj$clustering)
+cluster_3_means <- calculate_cluster_means(3, data_premium, clusObj$clustering)
+cluster_4_means <- calculate_cluster_means(4, data_premium, clusObj$clustering)
+cluster_5_means <- calculate_cluster_means(5, data_premium, clusObj$clustering)
+cluster_6_means <- calculate_cluster_means(6, data_premium, clusObj$clustering)
+cluster_7_means <- calculate_cluster_means(7, data_premium, clusObj$clustering)
+cluster_8_means <- calculate_cluster_means(8, data_premium, clusObj$clustering)
+
+# Print the calculated means for verification
+cat("Cluster 1 Means:\n")
+print(cluster_1_means)
+
+cat("Cluster 2 Means:\n")
+print(cluster_2_means)
+
+cat("Cluster 3 Means:\n")
+print(cluster_3_means)
+
+cat("Cluster 4 Means:\n")
+print(cluster_4_means)
+
+cat("Cluster 5 Means:\n")
+print(cluster_5_means)
+
+cat("Cluster 6 Means:\n")
+print(cluster_6_means)
+
+cat("Cluster 7 Means:\n")
+print(cluster_7_means)
+
+cat("Cluster 8 Means:\n")
+print(cluster_8_means)
+
+
+```
+
+
+
+```{r}
+# Function to find top features with greatest absolute percent difference
+find_top_percent_diff_features <- function(cluster_means, overall_means) {
+  percent_diff <- sapply(names(cluster_means), function(feature) {
+    if (is.numeric(cluster_means[[feature]]) && is.numeric(overall_means[[feature]])) {
+      abs((cluster_means[[feature]] - overall_means[[feature]]) / overall_means[[feature]]) * 100
+    } else {
+      NA
+    }
+  })
+  percent_diff <- na.omit(percent_diff)  # Remove NA values
+  top_features <- sort(percent_diff, decreasing = TRUE)[1:5]
+  return(names(top_features))
+}
+
+# Calculate and print top 5 features for Cluster 1
+top_features_cluster_1 <- find_top_percent_diff_features(as.list(cluster_1_means), as.list(overall_means))
+cat("Top 5 features with greatest absolute percent difference for Cluster 1:\n")
+for (feature in top_features_cluster_1) {
+  cat(paste(feature, ":", cluster_1_means[[feature]], "(Overall Mean:", overall_means[[feature]], ")\n"))
+}
+
+# Calculate and print top 5 features for Cluster 6
+top_features_cluster_6 <- find_top_percent_diff_features(as.list(cluster_6_means), as.list(overall_means))
+cat("Top 5 features with greatest absolute percent difference for Cluster 6:\n")
+for (feature in top_features_cluster_6) {
+  cat(paste(feature, ":", cluster_6_means[[feature]], "(Overall Mean:", overall_means[[feature]], ")\n"))
+}
+
+# Calculate and print top 5 features for Cluster 8
+top_features_cluster_8 <- find_top_percent_diff_features(as.list(cluster_8_means), as.list(overall_means))
+cat("Top 5 features with greatest absolute percent difference for Cluster 8:\n")
+for (feature in top_features_cluster_8) {
+  cat(paste(feature, ":", cluster_8_means[[feature]], "(Overall Mean:", overall_means[[feature]], ")\n"))
+}
+
+```
+
+
+
+
+
+```{r}
+# Load necessary libraries
+library(data.table)
+library(dplyr)
+library(PReMiuM)
+library(ggplot2)
+library(reshape2)
+
+# Print column names of data_premium to check for consistency
+print(colnames(data_premium))
+
+# Ensure selected_features match the column names in data_premium
+selected_features <- c("Urea_nitrogen", "comorb_score", "Lactic_acid", "heart_rate", "Urine_output", "Anion_gap")
+
+# Combine cluster data
+cluster_data_combined <- rbind(
+  cbind(data_premium[clusObj$clustering == 1, ], cluster = "Cluster 1"),
+  cbind(data_premium[clusObj$clustering == 6, ], cluster = "Cluster 6"),
+  cbind(data_premium[clusObj$clustering == 8, ], cluster = "Cluster 8")
+)
+
+# Calculate overall means for the selected features
+overall_means <- colMeans(data_premium[selected_features], na.rm = TRUE)
+
+# Melt the data for ggplot2
+melted_data <- melt(cluster_data_combined, id.vars = "cluster", measure.vars = selected_features)
+
+# Create a data frame for overall means for use in geom_hline
+mean_data <- data.frame(variable = names(overall_means), value = overall_means)
+
+# Calculate mean and 95% confidence intervals for each cluster
+conf_intervals <- melted_data %>%
+  group_by(cluster, variable) %>%
+  summarise(
+    mean = mean(value, na.rm = TRUE),
+    lower = mean(value, na.rm = TRUE) - qt(0.975, df = n() - 1) * sd(value, na.rm = TRUE) / sqrt(n()),
+    upper = mean(value, na.rm = TRUE) + qt(0.975, df = n() - 1) * sd(value, na.rm = TRUE) / sqrt(n())
+  )
+
+# Create the error bar plots with 95% confidence intervals
+formatted_names <- c("Urea Nitrogen", "Comorbidity Score", "Lactic Acid", "Heart Rate", "Urine Output", "Anion Gap")
+
+# Update melted_data with formatted names
+melted_data$variable <- factor(melted_data$variable, levels = selected_features, labels = formatted_names)
+mean_data$variable <- factor(mean_data$variable, levels = selected_features, labels = formatted_names)
+conf_intervals$variable <- factor(conf_intervals$variable, levels = selected_features, labels = formatted_names)
+
+ggplot(conf_intervals, aes(x = cluster, y = mean, colour = cluster)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, size = 0.7) +
+  facet_wrap(~ variable, scales = "free_y") +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(), 
+    axis.ticks.x = element_blank(),
+    plot.title = element_text(size = 16, face = "bold"),
+    axis.title = element_text(size = 14),
+    strip.text = element_text(size = 12),
+    legend.text = element_text(size = 12),
+    legend.title = element_text(size = 14)
+  ) +
+  geom_hline(data = mean_data, aes(yintercept = value, linetype = "Overall Mean"), color = "red", size = .7) +
+  scale_linetype_manual(name = "Legend", values = c("Overall Mean" = "dashed")) +
+  labs(title = "95% Confidence Intervals of Selected Features",
+       x = "Cluster",
+       y = "Value",
+       color = "Cluster")
+
+```
+
+```{r}
+# Load necessary libraries
+library(data.table)
+library(dplyr)
+library(PReMiuM)
+library(ggplot2)
+library(reshape2)
+
+# Print column names of data_premium to check for consistency
+print(colnames(data_premium))
+
+# Ensure selected_features match the column names in data_premium
+selected_features <- c("Urea_nitrogen", "comorb_score", "Lactic_acid", "heart_rate", "Urine_output", "Anion_gap")
+
+# Combine cluster data
+cluster_data_combined <- rbind(
+  cbind(data_premium[clusObj$clustering == 1, ], cluster = "Cluster 1"),
+  cbind(data_premium[clusObj$clustering == 6, ], cluster = "Cluster 6"),
+  cbind(data_premium[clusObj$clustering == 8, ], cluster = "Cluster 8")
+)
+
+# Calculate overall means for the selected features
+overall_means <- colMeans(data_premium[selected_features], na.rm = TRUE)
+
+# Melt the data for ggplot2
+melted_data <- melt(cluster_data_combined, id.vars = "cluster", measure.vars = selected_features)
+
+# Create a data frame for overall means for use in geom_hline
+mean_data <- data.frame(variable = names(overall_means), value = overall_means)
+
+# Calculate mean and 95% confidence intervals for each cluster
+conf_intervals <- melted_data %>%
+  group_by(cluster, variable) %>%
+  summarise(
+    mean = mean(value, na.rm = TRUE),
+    lower = mean(value, na.rm = TRUE) - qt(0.975, df = n() - 1) * sd(value, na.rm = TRUE) / sqrt(n()),
+    upper = mean(value, na.rm = TRUE) + qt(0.975, df = n() - 1) * sd(value, na.rm = TRUE) / sqrt(n())
+  )
+
+# Create the error bar plots with 95% confidence intervals
+formatted_names <- c("Urea Nitrogen", "Comorbidity Score", "Lactic Acid", "Heart Rate", "Urine Output", "Anion Gap")
+
+# Update melted_data with formatted names
+melted_data$variable <- factor(melted_data$variable, levels = selected_features, labels = formatted_names)
+mean_data$variable <- factor(mean_data$variable, levels = selected_features, labels = formatted_names)
+conf_intervals$variable <- factor(conf_intervals$variable, levels = selected_features, labels = formatted_names)
+
+ggplot(conf_intervals, aes(x = cluster, y = mean, colour = cluster)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, size = 0.7) +
+  facet_wrap(~ variable, scales = "free_y") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank()) +
+  geom_hline(data = mean_data, aes(yintercept = value, linetype = "Overall Mean"), color = "red", size = .7) +
+  scale_linetype_manual(name = "Legend", values = c("Overall Mean" = "dashed")) +
+  labs(title = "95% Confidence Intervals of Selected Features by Cluster with Overall Means",
+       x = "Cluster",
+       y = "Value",
+       color = "Cluster")
+
+```
+
+
+
+
+```{r}
+# Create a data frame with cluster numbers and the outcome (death) count
+cluster_outcomes <- data.frame(
+  cluster = factor(1:8),
+  deaths = c(
+    sum(data_premium[clusObj$clustering == 1, "outcome"]),
+    sum(data_premium[clusObj$clustering == 2, "outcome"]),
+    sum(data_premium[clusObj$clustering == 3, "outcome"]),
+    sum(data_premium[clusObj$clustering == 4, "outcome"]),
+    sum(data_premium[clusObj$clustering == 5, "outcome"]),
+    sum(data_premium[clusObj$clustering == 6, "outcome"]),
+    sum(data_premium[clusObj$clustering == 7, "outcome"]),
+    sum(data_premium[clusObj$clustering == 8, "outcome"])
+  ),
+  survivors = c(
+    sum(clusObj$clustering == 1) - sum(data_premium[clusObj$clustering == 1, "outcome"]),
+    sum(clusObj$clustering == 2) - sum(data_premium[clusObj$clustering == 2, "outcome"]),
+    sum(clusObj$clustering == 3) - sum(data_premium[clusObj$clustering == 3, "outcome"]),
+    sum(clusObj$clustering == 4) - sum(data_premium[clusObj$clustering == 4, "outcome"]),
+    sum(clusObj$clustering == 5) - sum(data_premium[clusObj$clustering == 5, "outcome"]),
+    sum(clusObj$clustering == 6) - sum(data_premium[clusObj$clustering == 6, "outcome"]),
+    sum(clusObj$clustering == 7) - sum(data_premium[clusObj$clustering == 7, "outcome"]),
+    sum(clusObj$clustering == 8) - sum(data_premium[clusObj$clustering == 8, "outcome"])
+  )
+)
+
+# Melt the data for ggplot2
+library(reshape2)
+melted_outcomes <- melt(cluster_outcomes, id.vars = "cluster", variable.name = "status", value.name = "count")
+
+# Create the stacked bar chart
+library(ggplot2)
+ggplot(melted_outcomes, aes(x = cluster, y = count, fill = status)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Cluster Sizes and Outcome Distribution",
+       x = "Cluster",
+       y = "Number of Individuals",
+       fill = "Status") +
+  scale_fill_manual(values = c("deaths" = "azure4", "survivors" = "azure3"), labels = c("Deaths", "Survivors")) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold"),
+    axis.title = element_text(size = 15),
+    axis.text = element_text(size = 14),
+    legend.text = element_text(size = 14),
+    legend.title = element_text(size = 16, face = "bold")
+  )
+
+```
+
+
+
+
+
+```{r}
+# Load necessary libraries
+library(data.table)
+library(dplyr)
+library(PReMiuM)
+library(ggplot2)
+library(coda)  # For MCMC diagnostics
+
+# Assuming riskProfileObj and clusObj have been computed correctly
+
+# Extract risk values and clustering information
+risks <- riskProfileObj$risk
+cluster_assignments <- clusObj$clustering
+
+# Ensure risks are in the correct format
+risks <- as.vector(risks)
+
+# Check lengths
+print(length(risks))
+print(length(cluster_assignments))
+
+# Combine cluster assignments and risks into a data frame
+risk_data <- data.frame(cluster = cluster_assignments, risk = risks[1:length(cluster_assignments)])  # Adjusting lengths
+
+# Filter to only include clusters 1, 6, and 8
+risk_data_filtered <- risk_data %>%
+  filter(cluster %in% c(1, 6, 8))
+
+# Calculate the 95% credible intervals for each cluster
+credible_intervals <- risk_data_filtered %>%
+  group_by(cluster) %>%
+  summarise(lower = quantile(risk, 0.025), upper = quantile(risk, 0.975))
+
+# Correct the credible intervals data frame to ensure proper alignment with density plots
+credible_intervals$cluster <- as.factor(credible_intervals$cluster)
+
+# Create a plot for the posterior distributions with 95% credible intervals
+ggplot(risk_data_filtered, aes(x = risk, fill = factor(cluster))) +
+  geom_density(alpha = 0.2) +
+  geom_vline(data = credible_intervals, aes(xintercept = lower, color = factor(cluster)), linetype = "dashed", size = 1) +
+  geom_vline(data = credible_intervals, aes(xintercept = upper, color = factor(cluster)), linetype = "dashed", size = 1) +
+  facet_wrap(~ cluster, scales = "fixed") +  # Set scales to fixed
+  theme_minimal() +
+  labs(title = "Posterior Distributions with 95% Credible Intervals",
+       x = "Risk Value",
+       y = "Density",
+       fill = "Cluster",
+       color = "Cluster") +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(size = 18, face = "bold"),
+    axis.title = element_text(size = 15),
+    axis.text = element_text(size = 14),
+    strip.text = element_text(size = 14, face = "bold")
+  ) +
+  guides(fill=guide_legend(title="Cluster"), color=guide_legend(title="Cluster"))
+
+```
+
+
+
+
