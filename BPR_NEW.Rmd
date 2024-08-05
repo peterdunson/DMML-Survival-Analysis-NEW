@@ -14,9 +14,6 @@ library(dplyr)
 library(PReMiuM)
 library(parallel)
 
-# Set precision for numeric output
-options(digits = 2)
-
 # Load the dataset using fread
 data_bpr <- fread("RF_imputation_NEW.csv")
 
@@ -63,7 +60,7 @@ run_profile_regression <- function(seed) {
 }
 
 # Set the number of cores for parallel processing
-num_cores <- 6
+num_cores <- 8
 
 # Define different seeds for sensitivity analysis
 seeds <- c(345978, 123456, 654321)
@@ -93,9 +90,6 @@ for (res in results) {
   plot_risk_profiles_in_subsets(res$riskProfileObj, covariates)
   summary(res$riskProfileObj)
 }
-
-
-
 ```
 
 
@@ -129,13 +123,13 @@ data_premium <- as.data.frame(data_premium)
 result <- profRegr(
   yModel = "Bernoulli",
   xModel = "Discrete",
-  nSweeps = 2000,
-  nBurn = 500,
+  nSweeps = 50,
+  nBurn = 20,
   data = data_premium,
   output = "output",
   covNames = covariates,
   outcome = "outcome",  # Specify the outcome column name as a string
-  nClusInit = 30, 
+  nClusInit = 10, 
   seed = 345978
 )
 
